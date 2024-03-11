@@ -20,6 +20,7 @@ jobs:
         run: |
           git clone https://github.com/magland/kerchunk-fork
           cd kerchunk-fork
+          git checkout hdmf
           pip install -e .
       - name: dandi-kerchunk
         run: |
