@@ -24,6 +24,13 @@ def dandi_kerchunk(
     max_time_sec: float,
     max_time_sec_per_dandiset: float
 ):
+    if os.environ.get("AWS_ACCESS_KEY_ID") is None:
+        raise ValueError("AWS_ACCESS_KEY_ID not set.")
+    if os.environ.get("AWS_SECRET_ACCESS_KEY") is None:
+        raise ValueError("AWS_SECRET_ACCESS_KEY not set.")
+    if os.environ.get("S3_ENDPOINT_URL") is None:
+        raise ValueError("S3_ENDPOINT_URL not set.")
+
     dandisets = fetch_all_dandisets()
 
     timer = time.time()
@@ -44,16 +51,13 @@ def kerchunk_dandiset(
 ):
     timer = time.time()
 
-    if os.environ.get("AWS_ACCESS_KEY_ID") is not None:
-        s3 = boto3.client(
-            "s3",
-            aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
-            aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
-            endpoint_url=os.environ["S3_ENDPOINT_URL"],
-            region_name="auto",  # for cloudflare
-        )
-    else:
-        s3 = None
+    s3 = boto3.client(
+        "s3",
+        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+        endpoint_url=os.environ["S3_ENDPOINT_URL"],
+        region_name="auto",  # for cloudflare
+    )
 
     # Create the dandi parsed url
     parsed_url = da.parse_dandi_url(f"https://dandiarchive.org/dandiset/{dandiset_id}")
@@ -74,6 +78,7 @@ def kerchunk_dandiset(
                     print(f"Skipping {asset_id} because it already exists.")
                     continue
                 with tempfile.TemporaryDirectory() as tmpdir:
+                    print(f"Processing asset {asset_id}")
                     _create_zarr_json(asset.download_url, tmpdir + "/zarr.json")
                     _upload_file_to_s3(s3, "neurosift-kerchunk", file_key, tmpdir + "/zarr.json")
             if time.time() - timer > max_time_sec:
@@ -82,14 +87,19 @@ def kerchunk_dandiset(
 
 
 def _remote_file_exists(url: str) -> bool:
+    # use a HEAD request to check if the file exists
+    headers = {  # user-agent is required for some servers
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+    }
+    req = urllib.request.Request(url, headers=headers, method="HEAD")
     try:
-        urllib.request.urlopen(url)
-        return True
+        with urllib.request.urlopen(req) as response:
+            return response.getcode() == 200
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return False
         else:
-            raise
+            raise e
 
 
 def _create_zarr_json(nwb_url: str, zarr_json_path: str):
@@ -98,7 +108,7 @@ def _create_zarr_json(nwb_url: str, zarr_json_path: str):
         grp = f
         h5chunks = kerchunk.hdf.SingleHdf5ToZarr(grp, url=nwb_url, hdmf_mode=True)
         a = h5chunks.translate()
-        with open('example1.zarr.json', 'w') as g:
+        with open(zarr_json_path, 'w') as g:
             json.dump(a, g, indent=2)
 
 
