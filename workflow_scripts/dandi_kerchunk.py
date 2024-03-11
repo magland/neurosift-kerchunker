@@ -72,15 +72,20 @@ def kerchunk_dandiset(
             asset_num += 1
             if asset.path.endswith(".nwb"):  # only process NWB files
                 asset_id = asset.identifier
-                file_key = f'assets/{asset_id}/zarr.json'
+                file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/zarr.json'
                 zarr_json_url = f'https://kerchunk.neurosift.org/{file_key}'
                 if _remote_file_exists(zarr_json_url):
                     print(f"Skipping {asset_id} because it already exists.")
                     continue
                 with tempfile.TemporaryDirectory() as tmpdir:
                     print(f"Processing asset {asset_id}")
+                    timer0 = time.time()
                     _create_zarr_json(asset.download_url, tmpdir + "/zarr.json")
+                    elapsed0 = time.time() - timer0
+                    print(f"Time elapsed for this asset: {elapsed0} seconds")
+                    print(f"Uploading {file_key} to S3")
                     _upload_file_to_s3(s3, "neurosift-kerchunk", file_key, tmpdir + "/zarr.json")
+                    print('.')
             if time.time() - timer > max_time_sec:
                 print("Time limit reached for this dandiset.")
                 break
