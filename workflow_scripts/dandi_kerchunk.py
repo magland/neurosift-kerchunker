@@ -72,9 +72,11 @@ def kerchunk_dandiset(
             asset_num += 1
             if asset.path.endswith(".nwb"):  # only process NWB files
                 asset_id = asset.identifier
-                file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/zarr.json'
+                file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}.zarr.json'
+                info_file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}.info.json'
                 zarr_json_url = f'https://kerchunk.neurosift.org/{file_key}'
-                if _remote_file_exists(zarr_json_url):
+                info_url = f'https://kerchunk.neurosift.org/{info_file_key}'
+                if _remote_file_exists(zarr_json_url) and _remote_file_exists(info_url):
                     print(f"Skipping {asset_id} because it already exists.")
                     continue
                 with tempfile.TemporaryDirectory() as tmpdir:
@@ -85,6 +87,23 @@ def kerchunk_dandiset(
                     print(f"Time elapsed for this asset: {elapsed0} seconds")
                     print(f"Uploading {file_key} to S3")
                     _upload_file_to_s3(s3, "neurosift-kerchunk", file_key, tmpdir + "/zarr.json")
+                    with open(tmpdir + "/info.json", "w") as f:
+                        json.dump(
+                            {
+                                "version": 1,
+                                "dandiset_id": dandiset_id,
+                                "asset_id": asset_id,
+                                "asset_num": asset_num,
+                                "asset_path": asset.path,
+                                "asset_download_url": asset.download_url,
+                                "asset_size": asset.size,
+                                "elapsed_sec": elapsed0,
+                                "timestamp": time.time()
+                            },
+                            f,
+                            indent=2,
+                        )
+                    _upload_file_to_s3(s3, "neurosift-kerchunk", info_file_key, tmpdir + "/info.json")
                     print('.')
             if time.time() - timer > max_time_sec:
                 print("Time limit reached for this dandiset.")
