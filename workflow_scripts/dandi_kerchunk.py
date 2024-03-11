@@ -20,6 +20,12 @@ def main():
     )
 
 
+thisdir = os.path.dirname(os.path.realpath(__file__))
+with open(f'{thisdir}/dandiset_ids.txt', 'r') as f:
+    dandiset_ids = f.read().splitlines()
+    dandiset_ids = [x for x in dandiset_ids if x]
+
+
 def dandi_kerchunk(
     max_time_sec: float,
     max_time_sec_per_dandiset: float
@@ -34,7 +40,12 @@ def dandi_kerchunk(
     dandisets = fetch_all_dandisets()
 
     timer = time.time()
-    for dandiset in dandisets:
+    # for dandiset in dandisets:
+    for dandiset_id in dandiset_ids:
+        dandiset = next((x for x in dandisets if x.dandiset_id == dandiset_id), None)
+        if dandiset is None:
+            print(f"Dandiset {dandiset_id} not found.")
+            continue
         print("")
         print(f"Processing {dandiset.dandiset_id} version {dandiset.version}")
         kerchunk_dandiset(dandiset.dandiset_id, max_time_sec_per_dandiset)
@@ -66,14 +77,15 @@ def kerchunk_dandiset(
         if dandiset is None:
             print(f"Dandiset {dandiset_id} not found.")
             return
+
         asset_num = 0
         # Loop through all assets in the dandiset
         for asset in dandiset.get_assets():
             asset_num += 1
             if asset.path.endswith(".nwb"):  # only process NWB files
                 asset_id = asset.identifier
-                file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}.zarr.json'
-                info_file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}.info.json'
+                file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/zarr.json'
+                info_file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/info.json'
                 zarr_json_url = f'https://kerchunk.neurosift.org/{file_key}'
                 info_url = f'https://kerchunk.neurosift.org/{info_file_key}'
                 if _remote_file_exists(zarr_json_url) and _remote_file_exists(info_url):
