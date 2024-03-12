@@ -1,6 +1,7 @@
 import time
 import urllib.request
 import urllib.error
+import filelock
 import json
 from typing import List
 import os
@@ -13,13 +14,18 @@ import h5py
 import kerchunk.hdf  # type: ignore
 
 
+# warning: don't use force=True when running more than one instance of this script because the locking won't do the right thing
+force = False
+
+
 def main():
     dandi_kerchunk(
         max_time_sec=60 * 120,
         max_time_sec_per_dandiset=30
     )
 
-assets_to_skip = [ # these take too long
+
+assets_to_skip = [  # these take too long
     # 000717
     'a6951f6e-b67e-4df3-a14f-07b7854b821c'
 ]
@@ -28,7 +34,7 @@ assets_to_skip = [ # these take too long
 thisdir = os.path.dirname(os.path.realpath(__file__))
 with open(f'{thisdir}/dandiset_ids.txt', 'r') as f:
     dandiset_ids = f.read().splitlines()
-    dandiset_ids = [x for x in dandiset_ids if x]
+    dandiset_ids = [x for x in dandiset_ids if x and not x.startswith('#')]
 
 
 def dandi_kerchunk(
@@ -67,14 +73,6 @@ def kerchunk_dandiset(
 ):
     timer = time.time()
 
-    s3 = boto3.client(
-        "s3",
-        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
-        endpoint_url=os.environ["S3_ENDPOINT_URL"],
-        region_name="auto",  # for cloudflare
-    )
-
     # Create the dandi parsed url
     parsed_url = da.parse_dandi_url(f"https://dandiarchive.org/dandiset/{dandiset_id}")
 
@@ -83,51 +81,91 @@ def kerchunk_dandiset(
             print(f"Dandiset {dandiset_id} not found.")
             return
 
-        asset_num = 0
-        # Loop through all assets in the dandiset
-        for asset in dandiset.get_assets():
-            asset_num += 1
-            if asset.path.endswith(".nwb"):  # only process NWB files
-                asset_id = asset.identifier
-                if asset_id in assets_to_skip:
-                    print(f"Skipping {asset_id} because it is in assets_to_skip.")
-                    continue
-                file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/zarr.json'
-                info_file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/info.json'
-                zarr_json_url = f'https://kerchunk.neurosift.org/{file_key}'
-                info_url = f'https://kerchunk.neurosift.org/{info_file_key}'
-                if _remote_file_exists(zarr_json_url) and _remote_file_exists(info_url):
-                    print(f"Skipping {asset_id} because it already exists.")
-                    continue
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    print(f"Processing asset {asset_id}")
-                    timer0 = time.time()
-                    _create_zarr_json(asset.download_url, tmpdir + "/zarr.json")
-                    elapsed0 = time.time() - timer0
-                    print(f"Time elapsed for this asset: {elapsed0} seconds")
-                    print(f"Uploading {file_key} to S3")
-                    _upload_file_to_s3(s3, "neurosift-kerchunk", file_key, tmpdir + "/zarr.json")
-                    with open(tmpdir + "/info.json", "w") as f:
-                        json.dump(
-                            {
-                                "version": 1,
-                                "dandiset_id": dandiset_id,
-                                "asset_id": asset_id,
-                                "asset_num": asset_num,
-                                "asset_path": asset.path,
-                                "asset_download_url": asset.download_url,
-                                "asset_size": asset.size,
-                                "elapsed_sec": elapsed0,
-                                "timestamp": time.time()
-                            },
-                            f,
-                            indent=2,
-                        )
-                    _upload_file_to_s3(s3, "neurosift-kerchunk", info_file_key, tmpdir + "/info.json")
-                    print('.')
-            if time.time() - timer > max_time_sec:
-                print("Time limit reached for this dandiset.")
-                break
+        # Get all the NWB assets in the dandiset
+        assets = []
+        for asset_obj in dandiset.get_assets():
+            if asset_obj.path.endswith(".nwb") and not (asset_obj.identifier in assets_to_skip):
+                assets.append({
+                    "identifier": asset_obj.identifier,
+                    "path": asset_obj.path,
+                    "size": asset_obj.size,
+                    "download_url": asset_obj.download_url,
+                    "dandiset_id": dandiset_id,
+                })
+
+        for asset in assets:
+            process_asset(asset)
+            elapsed_sec = time.time() - timer
+            if elapsed_sec > max_time_sec:
+                print("Time limit reached.")
+                return
+
+
+def process_asset(asset):
+    dandiset_id = asset['dandiset_id']
+    s3 = boto3.client(
+        "s3",
+        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+        endpoint_url=os.environ["S3_ENDPOINT_URL"],
+        region_name="auto",  # for cloudflare
+    )
+    asset_id = asset['identifier']
+    file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/zarr.json'
+    info_file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/info.json'
+    zarr_json_url = f'https://kerchunk.neurosift.org/{file_key}'
+    info_url = f'https://kerchunk.neurosift.org/{info_file_key}'
+    if not force:
+        if _remote_file_exists(zarr_json_url) and _remote_file_exists(info_url):
+            print(f"Skipping {asset_id} because it already exists.")
+            return
+    
+    lock = acquire_lock(asset_id)
+    if lock is None:
+        print(f"Skipping {asset_id} because it is locked.")
+        return
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            print(f"Processing asset {asset_id}: {asset['path']}")
+            timer0 = time.time()
+            _create_zarr_json(asset['download_url'], tmpdir + "/zarr.json")
+            elapsed0 = time.time() - timer0
+            print(f"Time elapsed for this asset: {elapsed0} seconds")
+            print(f"Uploading {file_key} to S3")
+            _upload_file_to_s3(s3, "neurosift-kerchunk", file_key, tmpdir + "/zarr.json")
+            with open(tmpdir + "/info.json", "w") as f:
+                json.dump(
+                    {
+                        "version": 1,
+                        "dandiset_id": dandiset_id,
+                        "asset_id": asset_id,
+                        "asset_path": asset['path'],
+                        "asset_download_url": asset['download_url'],
+                        "asset_size": asset['size'],
+                        "elapsed_sec": elapsed0,
+                        "timestamp": time.time()
+                    },
+                    f,
+                    indent=2,
+                )
+            _upload_file_to_s3(s3, "neurosift-kerchunk", info_file_key, tmpdir + "/info.json")
+            print('.')
+    finally:
+        release_lock(lock)
+
+
+def acquire_lock(asset_id):
+    lock = filelock.FileLock(f'/tmp/dandi_kerchunk_{asset_id}.lock')
+    try:
+        lock.acquire(timeout=1)
+    except filelock.Timeout:
+        return None
+    return lock
+    
+
+
+def release_lock(lock):
+    lock.release()
 
 
 def _remote_file_exists(url: str) -> bool:
@@ -154,11 +192,11 @@ def _create_zarr_json(nwb_url: str, zarr_json_path: str):
             grp,
             url=nwb_url,
             hdmf_mode=True,
-            num_chunks_per_dataset_threshold=2
+            num_chunks_per_dataset_threshold=1000
         )
         a = h5chunks.translate()
         with open(zarr_json_path, 'w') as g:
-            json.dump(a, g, indent=2)
+            json.dump(a, g, indent=2, sort_keys=True)
 
 
 def fetch_all_dandisets():
