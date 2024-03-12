@@ -19,6 +19,11 @@ def main():
         max_time_sec_per_dandiset=30
     )
 
+assets_to_skip = [ # these take too long
+    # 000717
+    'a6951f6e-b67e-4df3-a14f-07b7854b821c'
+]
+
 
 thisdir = os.path.dirname(os.path.realpath(__file__))
 with open(f'{thisdir}/dandiset_ids.txt', 'r') as f:
@@ -84,6 +89,9 @@ def kerchunk_dandiset(
             asset_num += 1
             if asset.path.endswith(".nwb"):  # only process NWB files
                 asset_id = asset.identifier
+                if asset_id in assets_to_skip:
+                    print(f"Skipping {asset_id} because it is in assets_to_skip.")
+                    continue
                 file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/zarr.json'
                 info_file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/info.json'
                 zarr_json_url = f'https://kerchunk.neurosift.org/{file_key}'
