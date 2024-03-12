@@ -32,10 +32,10 @@ assets_to_skip = [  # these take too long
 ]
 
 
-thisdir = os.path.dirname(os.path.realpath(__file__))
-with open(f'{thisdir}/dandiset_ids.txt', 'r') as f:
-    dandiset_ids = f.read().splitlines()
-    dandiset_ids = [x for x in dandiset_ids if x and not x.startswith('#')]
+# thisdir = os.path.dirname(os.path.realpath(__file__))
+# with open(f'{thisdir}/dandiset_ids.txt', 'r') as f:
+#     dandiset_ids = f.read().splitlines()
+#     dandiset_ids = [x for x in dandiset_ids if x and not x.startswith('#')]
 
 
 def dandi_kerchunk(
@@ -52,12 +52,12 @@ def dandi_kerchunk(
     dandisets = fetch_all_dandisets()
 
     timer = time.time()
-    # for dandiset in dandisets:
-    for dandiset_id in dandiset_ids:
-        dandiset = next((x for x in dandisets if x.dandiset_id == dandiset_id), None)
-        if dandiset is None:
-            print(f"Dandiset {dandiset_id} not found.")
-            continue
+    for dandiset in dandisets:
+        # for dandiset_id in dandiset_ids:
+        # dandiset = next((x for x in dandisets if x.dandiset_id == dandiset_id), None)
+        # if dandiset is None:
+        #     print(f"Dandiset {dandiset_id} not found.")
+        #     continue
         print("")
         print(f"Processing {dandiset.dandiset_id} version {dandiset.version}")
         with multiprocessing.Pool(6) as p:
@@ -102,7 +102,7 @@ def kerchunk_dandiset(
                     "download_url": asset_obj.download_url,
                     "dandiset_id": dandiset_id,
                 })
-        
+
         for i, asset in enumerate(assets):
             if i % modulus != modulus_offset:
                 continue
@@ -117,8 +117,6 @@ def kerchunk_dandiset(
 
 
 def process_asset(asset, *, num: int, total_num: int):
-    timer = time.time()
-
     dandiset_id = asset['dandiset_id']
     s3 = boto3.client(
         "s3",
@@ -136,7 +134,7 @@ def process_asset(asset, *, num: int, total_num: int):
         if _remote_file_exists(zarr_json_url) and _remote_file_exists(info_url):
             print(f"Skipping {asset_id} because it already exists.")
             return
-    
+
     lock = acquire_lock(asset_id)
     if lock is None:
         print(f"Skipping {asset_id} because it is locked.")
@@ -179,7 +177,6 @@ def acquire_lock(asset_id):
     except filelock.Timeout:
         return None
     return lock
-    
 
 
 def release_lock(lock):
