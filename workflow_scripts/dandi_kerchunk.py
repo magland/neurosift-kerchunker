@@ -142,7 +142,12 @@ def _create_zarr_json(nwb_url: str, zarr_json_path: str):
     remf = remfile.File(nwb_url, verbose=False)
     with h5py.File(remf, 'r') as f:
         grp = f
-        h5chunks = kerchunk.hdf.SingleHdf5ToZarr(grp, url=nwb_url, hdmf_mode=True)
+        h5chunks = kerchunk.hdf.SingleHdf5ToZarr(
+            grp,
+            url=nwb_url,
+            hdmf_mode=True,
+            num_chunks_per_dataset_threshold=2
+        )
         a = h5chunks.translate()
         with open(zarr_json_path, 'w') as g:
             json.dump(a, g, indent=2)
