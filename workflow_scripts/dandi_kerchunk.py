@@ -3,6 +3,7 @@ import urllib.request
 import urllib.error
 import filelock
 import json
+import multiprocessing
 from typing import List
 import os
 import tempfile
@@ -20,8 +21,8 @@ force = False
 
 def main():
     dandi_kerchunk(
-        max_time_sec=60 * 120,
-        max_time_sec_per_dandiset=30
+        max_time_sec=60 * 240,
+        max_time_sec_per_dandiset=60 * 3
     )
 
 
@@ -59,17 +60,26 @@ def dandi_kerchunk(
             continue
         print("")
         print(f"Processing {dandiset.dandiset_id} version {dandiset.version}")
-        kerchunk_dandiset(dandiset.dandiset_id, max_time_sec_per_dandiset)
+        with multiprocessing.Pool(6) as p:
+            num_parallel = 6
+            async_results = [
+                p.apply_async(kerchunk_dandiset, args=(dandiset.dandiset_id, max_time_sec_per_dandiset, num_parallel, ii))
+                for ii in range(6)
+            ]
+            for async_result in async_results:
+                async_result.get()
         elapsed_sec = time.time() - timer
-        print(f"Time elapsed: {elapsed_sec} seconds")
+        print(f"Time elapsed thus far: {elapsed_sec} seconds")
         if elapsed_sec > max_time_sec:
-            print("Time limit reached.")
+            print(f"Time limit reached for dandiset {dandiset.dandiset_id}.")
             break
 
 
 def kerchunk_dandiset(
     dandiset_id: str,
-    max_time_sec: float
+    max_time_sec: float,
+    modulus: int,
+    modulus_offset: int
 ):
     timer = time.time()
 
@@ -92,16 +102,23 @@ def kerchunk_dandiset(
                     "download_url": asset_obj.download_url,
                     "dandiset_id": dandiset_id,
                 })
-
-        for asset in assets:
-            process_asset(asset)
+        
+        for i, asset in enumerate(assets):
+            if i % modulus != modulus_offset:
+                continue
+            try:
+                process_asset(asset, num=i, total_num=len(assets))
+            except Exception as e:
+                print(f"Error processing asset {i} of {len(assets)} ({asset['identifier']}): {e}")
             elapsed_sec = time.time() - timer
             if elapsed_sec > max_time_sec:
                 print("Time limit reached.")
                 return
 
 
-def process_asset(asset):
+def process_asset(asset, *, num: int, total_num: int):
+    timer = time.time()
+
     dandiset_id = asset['dandiset_id']
     s3 = boto3.client(
         "s3",
@@ -126,11 +143,10 @@ def process_asset(asset):
         return
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            print(f"Processing asset {asset_id}: {asset['path']}")
+            print(f"[{asset['dandiset_id']} {num} / {total_num}] Processing asset {asset_id}: {asset['path']}")
             timer0 = time.time()
             _create_zarr_json(asset['download_url'], tmpdir + "/zarr.json")
             elapsed0 = time.time() - timer0
-            print(f"Time elapsed for this asset: {elapsed0} seconds")
             print(f"Uploading {file_key} to S3")
             _upload_file_to_s3(s3, "neurosift-kerchunk", file_key, tmpdir + "/zarr.json")
             with open(tmpdir + "/info.json", "w") as f:
@@ -149,7 +165,9 @@ def process_asset(asset):
                     indent=2,
                 )
             _upload_file_to_s3(s3, "neurosift-kerchunk", info_file_key, tmpdir + "/info.json")
-            print('.')
+            print(f"Time elapsed for asset {asset_id} ({num} / {total_num}): {elapsed0} seconds")
+            print('')
+            print('')
     finally:
         release_lock(lock)
 
@@ -192,7 +210,8 @@ def _create_zarr_json(nwb_url: str, zarr_json_path: str):
             grp,
             url=nwb_url,
             hdmf_mode=True,
-            num_chunks_per_dataset_threshold=1000
+            num_chunks_per_dataset_threshold=1000,
+            max_num_items=1000
         )
         a = h5chunks.translate()
         with open(zarr_json_path, 'w') as g:
