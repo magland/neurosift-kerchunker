@@ -20,6 +20,7 @@ jobs:
         run: |
           git clone https://github.com/neurodataWithoutBorders/lindi
           cd lindi
+          git checkout compound-types
           pip install -e .
       - name: dandi-lindi
         run: |

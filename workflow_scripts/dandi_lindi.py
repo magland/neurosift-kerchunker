@@ -42,6 +42,8 @@ def dandi_lindi(
 
     dandisets = fetch_all_dandisets()
 
+    num_parallel = 6
+
     timer = time.time()
     for dandiset in dandisets:
         # for dandiset_id in dandiset_ids:
@@ -51,11 +53,11 @@ def dandi_lindi(
         #     continue
         print("")
         print(f"Processing {dandiset.dandiset_id} version {dandiset.version}")
-        with multiprocessing.Pool(6) as p:
+        with multiprocessing.Pool(num_parallel) as p:
             num_parallel = 6
             async_results = [
                 p.apply_async(handle_dandiset, args=(dandiset.dandiset_id, max_time_sec_per_dandiset, num_parallel, ii))
-                for ii in range(6)
+                for ii in range(num_parallel)
             ]
             for async_result in async_results:
                 async_result.get()
@@ -100,6 +102,7 @@ def handle_dandiset(
             try:
                 process_asset(asset, num=i, total_num=len(assets))
             except Exception as e:
+                print(asset['download_url'])
                 print(f"Error processing asset {i} of {len(assets)} ({asset['identifier']}): {e}")
             elapsed_sec = time.time() - timer
             if elapsed_sec > max_time_sec:
@@ -108,6 +111,7 @@ def handle_dandiset(
 
 
 def process_asset(asset, *, num: int, total_num: int):
+    print(f"Processing asset {asset['download_url']}")
     dandiset_id = asset['dandiset_id']
     s3 = boto3.client(
         "s3",
@@ -139,6 +143,9 @@ def process_asset(asset, *, num: int, total_num: int):
             timer0 = time.time()
             with write_console_output(tmpdir + "/output.txt"):
                 _create_zarr_json(asset['download_url'], tmpdir + "/zarr.json")
+            with open(tmpdir + "/output.txt", "r") as f:
+                output = f.read()
+                print(output)
             elapsed0 = time.time() - timer0
             generation_metadata = {
                 "generatedBy": "dandi_lindi",
@@ -265,7 +272,11 @@ def _upload_file_to_s3(s3, bucket, object_key, fname):
 
 
 def _download_json(url: str) -> dict:
-    with urllib.request.urlopen(url) as response:
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+    }
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req) as response:
         return json.loads(response.read())
 
 
