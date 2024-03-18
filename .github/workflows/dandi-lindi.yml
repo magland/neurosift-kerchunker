@@ -16,15 +16,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Install kerchunk-fork
+      - name: Install lindi
         run: |
-          git clone https://github.com/magland/kerchunk-fork
-          cd kerchunk-fork
-          git checkout hdmf
+          git clone https://github.com/neurodataWithoutBorders/lindi
+          cd lindi
           pip install -e .
-      - name: dandi-kerchunk
+      - name: dandi-lindi
         run: |
-          python workflow_scripts/dandi_kerchunk.py
+          python workflow_scripts/dandi_lindi.py
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

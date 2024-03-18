@@ -2,5 +2,4 @@ boto3
 dandi
 h5py
 numpy
-remfile
 filelock

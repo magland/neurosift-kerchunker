@@ -10,26 +10,17 @@ import tempfile
 from pydantic import BaseModel
 import boto3
 import dandi.dandiarchive as da
-import remfile
-import h5py
-import kerchunk.hdf  # type: ignore
-
+import lindi
 
 # warning: don't use force=True when running more than one instance of this script because the locking won't do the right thing
 force = False
 
 
 def main():
-    dandi_kerchunk(
+    dandi_lindi(
         max_time_sec=60 * 240,
         max_time_sec_per_dandiset=60 * 3
     )
-
-
-assets_to_skip = [  # these take too long
-    # 000717
-    'a6951f6e-b67e-4df3-a14f-07b7854b821c'
-]
 
 
 # thisdir = os.path.dirname(os.path.realpath(__file__))
@@ -38,7 +29,7 @@ assets_to_skip = [  # these take too long
 #     dandiset_ids = [x for x in dandiset_ids if x and not x.startswith('#')]
 
 
-def dandi_kerchunk(
+def dandi_lindi(
     max_time_sec: float,
     max_time_sec_per_dandiset: float
 ):
@@ -63,7 +54,7 @@ def dandi_kerchunk(
         with multiprocessing.Pool(6) as p:
             num_parallel = 6
             async_results = [
-                p.apply_async(kerchunk_dandiset, args=(dandiset.dandiset_id, max_time_sec_per_dandiset, num_parallel, ii))
+                p.apply_async(handle_dandiset, args=(dandiset.dandiset_id, max_time_sec_per_dandiset, num_parallel, ii))
                 for ii in range(6)
             ]
             for async_result in async_results:
@@ -75,7 +66,7 @@ def dandi_kerchunk(
             break
 
 
-def kerchunk_dandiset(
+def handle_dandiset(
     dandiset_id: str,
     max_time_sec: float,
     modulus: int,
@@ -94,7 +85,7 @@ def kerchunk_dandiset(
         # Get all the NWB assets in the dandiset
         assets = []
         for asset_obj in dandiset.get_assets():
-            if asset_obj.path.endswith(".nwb") and not (asset_obj.identifier in assets_to_skip):
+            if asset_obj.path.endswith(".nwb"):
                 assets.append({
                     "identifier": asset_obj.identifier,
                     "path": asset_obj.path,
@@ -132,8 +123,11 @@ def process_asset(asset, *, num: int, total_num: int):
     info_url = f'https://kerchunk.neurosift.org/{info_file_key}'
     if not force:
         if _remote_file_exists(zarr_json_url) and _remote_file_exists(info_url):
-            print(f"Skipping {asset_id} because it already exists.")
-            return
+            info = _download_json(info_url)
+            generation_metadata = info.get("generationMetadata", {})
+            if generation_metadata.get("generatedBy") == "dandi_lindi":
+                print(f"Skipping {asset_id} because it already exists.")
+                return
 
     lock = acquire_lock(asset_id)
     if lock is None:
@@ -143,26 +137,46 @@ def process_asset(asset, *, num: int, total_num: int):
         with tempfile.TemporaryDirectory() as tmpdir:
             print(f"[{asset['dandiset_id']} {num} / {total_num}] Processing asset {asset_id}: {asset['path']}")
             timer0 = time.time()
-            _create_zarr_json(asset['download_url'], tmpdir + "/zarr.json")
+            with write_console_output(tmpdir + "/output.txt"):
+                _create_zarr_json(asset['download_url'], tmpdir + "/zarr.json")
             elapsed0 = time.time() - timer0
+            generation_metadata = {
+                "generatedBy": "dandi_lindi",
+                "generatedByVersion": 1,
+                "dandiset_id": dandiset_id,
+                "asset_id": asset_id,
+                "asset_path": asset['path'],
+                "asset_download_url": asset['download_url'],
+                "asset_size": asset['size'],
+                "generationTimestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "generationDuration": f"{elapsed0:.1f} seconds",
+                "console_output": open(tmpdir + "/output.txt", "r").read()
+            }
+            with open(tmpdir + '/zarr.json', 'r') as f:
+                zarr_json = json.load(f)
+                zarr_json['generationMetadata'] = generation_metadata
+            info = {
+                'generationMetadata': zarr_json['generationMetadata'],
+            }
+            with open(tmpdir + '/zarr.json', 'w') as f:
+                json.dump(zarr_json, f, indent=2, sort_keys=True)
+            with open(tmpdir + '/info.json', 'w') as f:
+                json.dump(info, f, indent=2)
+
             print(f"Uploading {file_key} to S3")
-            _upload_file_to_s3(s3, "neurosift-kerchunk", file_key, tmpdir + "/zarr.json")
-            with open(tmpdir + "/info.json", "w") as f:
-                json.dump(
-                    {
-                        "version": 1,
-                        "dandiset_id": dandiset_id,
-                        "asset_id": asset_id,
-                        "asset_path": asset['path'],
-                        "asset_download_url": asset['download_url'],
-                        "asset_size": asset['size'],
-                        "elapsed_sec": elapsed0,
-                        "timestamp": time.time()
-                    },
-                    f,
-                    indent=2,
-                )
-            _upload_file_to_s3(s3, "neurosift-kerchunk", info_file_key, tmpdir + "/info.json")
+            _upload_file_to_s3(
+                s3,
+                "neurosift-kerchunk",
+                file_key,
+                tmpdir + "/zarr.json"
+            )
+            print(f"Uploading {info_file_key} to S3")
+            _upload_file_to_s3(
+                s3,
+                "neurosift-kerchunk",
+                info_file_key,
+                tmpdir + "/info.json"
+            )
             print(f"Time elapsed for asset {asset_id} ({num} / {total_num}): {elapsed0} seconds")
             print('')
             print('')
@@ -171,7 +185,7 @@ def process_asset(asset, *, num: int, total_num: int):
 
 
 def acquire_lock(asset_id):
-    lock = filelock.FileLock(f'/tmp/dandi_kerchunk_{asset_id}.lock')
+    lock = filelock.FileLock(f'/tmp/dandi_lindi_{asset_id}.lock')
     try:
         lock.acquire(timeout=1)
     except filelock.Timeout:
@@ -200,19 +214,10 @@ def _remote_file_exists(url: str) -> bool:
 
 
 def _create_zarr_json(nwb_url: str, zarr_json_path: str):
-    remf = remfile.File(nwb_url, verbose=False)
-    with h5py.File(remf, 'r') as f:
-        grp = f
-        h5chunks = kerchunk.hdf.SingleHdf5ToZarr(
-            grp,
-            url=nwb_url,
-            hdmf_mode=True,
-            num_chunks_per_dataset_threshold=1000,
-            max_num_items=1000
-        )
-        a = h5chunks.translate()
-        with open(zarr_json_path, 'w') as g:
-            json.dump(a, g, indent=2, sort_keys=True)
+    store = lindi.LindiH5Store.from_file(nwb_url)
+    rfs = store.to_reference_file_system()
+    with open(zarr_json_path, 'w') as g:
+        json.dump(rfs, g, indent=2, sort_keys=True)
 
 
 def fetch_all_dandisets():
@@ -259,9 +264,33 @@ def _upload_file_to_s3(s3, bucket, object_key, fname):
     s3.upload_file(fname, bucket, object_key, ExtraArgs=extra_args)
 
 
+def _download_json(url: str) -> dict:
+    with urllib.request.urlopen(url) as response:
+        return json.loads(response.read())
+
+
 class Dandiset(BaseModel):
     dandiset_id: str
     version: str
+
+
+class write_console_output:
+    def __init__(self, path):
+        self.path = path
+
+    def __enter__(self):
+        self.f = open(self.path, "w")
+        self.stdout = os.dup(1)
+        self.stderr = os.dup(2)
+        os.dup2(self.f.fileno(), 1)
+        os.dup2(self.f.fileno(), 2)
+
+    def __exit__(self, type, value, traceback):
+        os.dup2(self.stdout, 1)
+        os.dup2(self.stderr, 2)
+        os.close(self.stdout)
+        os.close(self.stderr)
+        self.f.close()
 
 
 if __name__ == '__main__':
