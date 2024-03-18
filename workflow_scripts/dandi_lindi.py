@@ -130,8 +130,9 @@ def process_asset(asset, *, num: int, total_num: int):
             info = _download_json(info_url)
             generation_metadata = info.get("generationMetadata", {})
             if generation_metadata.get("generatedBy") == "dandi_lindi":
-                print(f"Skipping {asset_id} because it already exists.")
-                return
+                if generation_metadata.get("generatedByVersion") == 2:
+                    print(f"Skipping {asset_id} because it already exists.")
+                    return
 
     lock = acquire_lock(asset_id)
     if lock is None:
@@ -149,7 +150,7 @@ def process_asset(asset, *, num: int, total_num: int):
             elapsed0 = time.time() - timer0
             generation_metadata = {
                 "generatedBy": "dandi_lindi",
-                "generatedByVersion": 1,
+                "generatedByVersion": 2,
                 "dandiset_id": dandiset_id,
                 "asset_id": asset_id,
                 "asset_path": asset['path'],
