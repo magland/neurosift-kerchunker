@@ -130,7 +130,7 @@ def process_asset(asset, *, num: int, total_num: int):
             info = _download_json(info_url)
             generation_metadata = info.get("generationMetadata", {})
             if generation_metadata.get("generatedBy") == "dandi_lindi":
-                if generation_metadata.get("generatedByVersion") == 2:
+                if generation_metadata.get("generatedByVersion") == 3:
                     print(f"Skipping {asset_id} because it already exists.")
                     return
 
@@ -150,12 +150,12 @@ def process_asset(asset, *, num: int, total_num: int):
             elapsed0 = time.time() - timer0
             generation_metadata = {
                 "generatedBy": "dandi_lindi",
-                "generatedByVersion": 2,
-                "dandiset_id": dandiset_id,
-                "asset_id": asset_id,
-                "asset_path": asset['path'],
-                "asset_download_url": asset['download_url'],
-                "asset_size": asset['size'],
+                "generatedByVersion": 3,
+                "dandisetId": dandiset_id,
+                "assetId": asset_id,
+                "assetPath": asset['path'],
+                "assetDownloadUrl": asset['download_url'],
+                "assetSize": asset['size'],
                 "generationTimestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "generationDuration": f"{elapsed0:.1f} seconds",
                 "console_output": open(tmpdir + "/output.txt", "r").read()
