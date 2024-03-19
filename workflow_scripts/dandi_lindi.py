@@ -222,7 +222,7 @@ def _remote_file_exists(url: str) -> bool:
 
 
 def _create_zarr_json(nwb_url: str, zarr_json_path: str):
-    store = lindi.LindiH5Store.from_file(nwb_url)
+    store = lindi.LindiH5ZarrStore.from_file(nwb_url)
     rfs = store.to_reference_file_system()
     with open(zarr_json_path, 'w') as g:
         json.dump(rfs, g, indent=2, sort_keys=True)
