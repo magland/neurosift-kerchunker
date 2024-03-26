@@ -18,8 +18,8 @@ force = False
 
 def main():
     dandi_lindi(
-        max_time_sec=60 * 240,
-        max_time_sec_per_dandiset=60 * 3
+        max_time_sec=60 * 60 * 6,
+        max_time_sec_per_dandiset=60 * 1
     )
 
 
