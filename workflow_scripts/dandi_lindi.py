@@ -45,14 +45,14 @@ def dandi_lindi(
     num_parallel = 6
 
     timer = time.time()
-    for dandiset in dandisets:
+    for dandiset_index, dandiset in enumerate(dandisets):
         # for dandiset_id in dandiset_ids:
         # dandiset = next((x for x in dandisets if x.dandiset_id == dandiset_id), None)
         # if dandiset is None:
         #     print(f"Dandiset {dandiset_id} not found.")
         #     continue
         print("")
-        print(f"Processing {dandiset.dandiset_id} version {dandiset.version}")
+        print(f"Processing {dandiset.dandiset_id} version {dandiset.version} (dandiset {dandiset_index + 1} / {len(dandisets)})")
         with multiprocessing.Pool(num_parallel) as p:
             num_parallel = 6
             async_results = [
