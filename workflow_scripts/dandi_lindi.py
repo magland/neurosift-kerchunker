@@ -84,33 +84,36 @@ def handle_dandiset(
             print(f"Dandiset {dandiset_id} not found.")
             return
 
-        # Get all the NWB assets in the dandiset
-        assets = []
+        asset_index = 0
+        # important to respect the iterator so we don't pull down all the assets at once
+        # and overwhelm the server
         for asset_obj in dandiset.get_assets():
-            if asset_obj.path.endswith(".nwb"):
-                assets.append({
-                    "identifier": asset_obj.identifier,
-                    "path": asset_obj.path,
-                    "size": asset_obj.size,
-                    "download_url": asset_obj.download_url,
-                    "dandiset_id": dandiset_id,
-                })
-
-        for i, asset in enumerate(assets):
-            if i % modulus != modulus_offset:
+            if not asset_obj.path.endswith(".nwb"):
                 continue
+            if asset_index % modulus != modulus_offset:
+                asset_index += 1
+                continue
+            asset = {
+                "identifier": asset_obj.identifier,
+                "path": asset_obj.path,
+                "size": asset_obj.size,
+                "download_url": asset_obj.download_url,
+                "dandiset_id": dandiset_id,
+            }
             try:
-                process_asset(asset, num=i, total_num=len(assets))
+                process_asset(asset, num=asset_index)
             except Exception as e:
                 print(asset['download_url'])
-                print(f"Error processing asset {i} of {len(assets)} ({asset['identifier']}): {e}")
+                print(f"Error processing asset {asset_index} ({asset['identifier']}): {e}")
+                raise
             elapsed_sec = time.time() - timer
             if elapsed_sec > max_time_sec:
                 print("Time limit reached.")
                 return
+            asset_index += 1
 
 
-def process_asset(asset, *, num: int, total_num: int):
+def process_asset(asset, *, num: int):
     print(f"Processing asset {asset['download_url']}")
     dandiset_id = asset['dandiset_id']
     s3 = boto3.client(
@@ -130,7 +133,7 @@ def process_asset(asset, *, num: int, total_num: int):
             info = _download_json(info_url)
             generation_metadata = info.get("generationMetadata", {})
             if generation_metadata.get("generatedBy") == "dandi_lindi":
-                if generation_metadata.get("generatedByVersion") == 6:
+                if generation_metadata.get("generatedByVersion") == 8:
                     print(f"Skipping {asset_id} because it already exists.")
                     return
 
@@ -140,7 +143,7 @@ def process_asset(asset, *, num: int, total_num: int):
         return
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            print(f"[{asset['dandiset_id']} {num} / {total_num}] Processing asset {asset_id}: {asset['path']}")
+            print(f"[{asset['dandiset_id']} {num}] Processing asset {asset_id}: {asset['path']}")
             timer0 = time.time()
             with write_console_output(tmpdir + "/output.txt"):
                 _create_zarr_json(asset['download_url'], tmpdir + "/zarr.json")
@@ -150,7 +153,7 @@ def process_asset(asset, *, num: int, total_num: int):
             elapsed0 = time.time() - timer0
             generation_metadata = {
                 "generatedBy": "dandi_lindi",
-                "generatedByVersion": 6,
+                "generatedByVersion": 8,
                 "dandisetId": dandiset_id,
                 "assetId": asset_id,
                 "assetPath": asset['path'],
@@ -185,7 +188,7 @@ def process_asset(asset, *, num: int, total_num: int):
                 info_file_key,
                 tmpdir + "/info.json"
             )
-            print(f"Time elapsed for asset {asset_id} ({num} / {total_num}): {elapsed0} seconds")
+            print(f"Time elapsed for asset {asset_id} ({num}): {elapsed0} seconds")
             print('')
             print('')
     finally:
