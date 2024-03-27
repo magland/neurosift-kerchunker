@@ -185,14 +185,14 @@ def process_asset(asset, *, num: int):
             print(f"Uploading {file_key} to S3")
             _upload_file_to_s3(
                 s3,
-                "neurosift-kerchunk",
+                "neurosift-lindi",
                 file_key,
                 tmpdir + "/zarr.json"
             )
             print(f"Uploading {info_file_key} to S3")
             _upload_file_to_s3(
                 s3,
-                "neurosift-kerchunk",
+                "neurosift-lindi",
                 info_file_key,
                 tmpdir + "/info.json"
             )
