@@ -132,8 +132,8 @@ def process_asset(asset, *, num: int):
     asset_id = asset['identifier']
     file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/zarr.json'
     info_file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/info.json'
-    zarr_json_url = f'https://kerchunk.neurosift.org/{file_key}'
-    info_url = f'https://kerchunk.neurosift.org/{info_file_key}'
+    zarr_json_url = f'https://lindi.neurosift.org/{file_key}'
+    info_url = f'https://lindi.neurosift.org/{info_file_key}'
     if not force:
         if _remote_file_exists(zarr_json_url) and _remote_file_exists(info_url):
             info = _download_json(info_url)
