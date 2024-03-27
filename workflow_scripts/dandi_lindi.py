@@ -54,7 +54,6 @@ def dandi_lindi(
         print("")
         print(f"Processing {dandiset.dandiset_id} version {dandiset.version} (dandiset {dandiset_index + 1} / {len(dandisets)})")
         with multiprocessing.Pool(num_parallel) as p:
-            num_parallel = 6
             async_results = [
                 p.apply_async(handle_dandiset, args=(dandiset.dandiset_id, max_time_sec_per_dandiset, num_parallel, ii))
                 for ii in range(num_parallel)
@@ -122,7 +121,6 @@ def handle_dandiset(
 
 
 def process_asset(asset, *, num: int):
-    print(f"Processing asset {asset['download_url']}")
     dandiset_id = asset['dandiset_id']
     s3 = boto3.client(
         "s3",
@@ -142,8 +140,10 @@ def process_asset(asset, *, num: int):
             generation_metadata = info.get("generationMetadata", {})
             if generation_metadata.get("generatedBy") == "dandi_lindi":
                 if generation_metadata.get("generatedByVersion") == 8:
-                    print(f"Skipping {asset_id} because it already exists.")
+                    # print(f"Skipping {asset_id} because it already exists.")
                     return
+
+    print(f"Processing asset {asset['download_url']}")
 
     lock = acquire_lock(asset_id)
     if lock is None:
