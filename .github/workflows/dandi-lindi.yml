@@ -20,7 +20,7 @@ jobs:
         run: |
           git clone https://github.com/neurodataWithoutBorders/lindi
           cd lindi
-          git checkout write
+          git checkout rfs-json
           pip install -e .
       - name: dandi-lindi
         run: |

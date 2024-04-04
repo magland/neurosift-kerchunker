@@ -19,7 +19,7 @@ force = False
 def main():
     dandi_lindi(
         max_time_sec=60 * 60 * 6,
-        max_time_sec_per_dandiset=60 * 5
+        max_time_sec_per_dandiset=60 * 1
     )
 
 
@@ -139,7 +139,7 @@ def process_asset(asset, *, num: int):
             info = _download_json(info_url)
             generation_metadata = info.get("generationMetadata", {})
             if generation_metadata.get("generatedBy") == "dandi_lindi":
-                if generation_metadata.get("generatedByVersion") == 8:
+                if generation_metadata.get("generatedByVersion") == 9:
                     # print(f"Skipping {asset_id} because it already exists.")
                     return
 
@@ -161,7 +161,7 @@ def process_asset(asset, *, num: int):
             elapsed0 = time.time() - timer0
             generation_metadata = {
                 "generatedBy": "dandi_lindi",
-                "generatedByVersion": 8,
+                "generatedByVersion": 9,
                 "dandisetId": dandiset_id,
                 "assetId": asset_id,
                 "assetPath": asset['path'],
