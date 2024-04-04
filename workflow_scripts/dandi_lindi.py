@@ -280,16 +280,35 @@ def _upload_file_to_s3(s3, bucket, object_key, fname):
     extra_args = {}
     if content_type is not None:
         extra_args["ContentType"] = content_type
-    s3.upload_file(fname, bucket, object_key, ExtraArgs=extra_args)
+    num_retries = 3
+    while True:
+        try:
+            s3.upload_file(fname, bucket, object_key, ExtraArgs=extra_args)
+            break
+        except Exception as e:
+            print(f"Error uploading {object_key} to S3: {e}")
+            time.sleep(3)
+            num_retries -= 1
+            if num_retries == 0:
+                raise
 
 
 def _download_json(url: str) -> dict:
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
-    }
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req) as response:
-        return json.loads(response.read())
+    num_retries = 3
+    while True:
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+            }
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req) as response:
+                return json.loads(response.read())
+        except Exception as e:
+            print(f"Error downloading {url}: {e}")
+            time.sleep(3)
+            num_retries -= 1
+            if num_retries == 0:
+                raise
 
 
 class Dandiset(BaseModel):
