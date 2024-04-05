@@ -1,4 +1,4 @@
-name: process-dandisets
+name: collect-all-meta
 on:
   workflow_dispatch:
   schedule:
