@@ -6,6 +6,7 @@ import tempfile
 from pydantic import BaseModel
 import boto3
 import urllib.request
+import urllib.error
 import dandi.dandiarchive as da
 
 
@@ -35,8 +36,9 @@ def collect_all_meta():
         print("")
         print(f"Processing {dandiset.dandiset_id} version {dandiset.version} (dandiset {dandiset_index + 1} / {len(dandisets)})")
         x = handle_dandiset(dandiset.dandiset_id, dandiset.version)
-        all_assets.extend(x['assets'])
-        all_items.extend(x['items'])
+        if x:
+            all_assets.extend(x['assets'])
+            all_items.extend(x['items'])
     with tempfile.TemporaryDirectory() as tmpdir:
         with open(tmpdir + "/all_meta.json", "w") as f:
             json.dump({"assets": all_assets, "items": all_items}, f, indent=2, sort_keys=True)
@@ -70,6 +72,9 @@ def handle_dandiset(
         if dandiset is None:
             print(f"Dandiset {dandiset_id} not found.")
             return
+        
+        assets = []
+        items = []
 
         num_consecutive_not_nwb = 0
         num_consecutive_not_found = 0
@@ -82,7 +87,7 @@ def handle_dandiset(
                 if num_consecutive_not_nwb >= 20:
                     # For example, this is important for 000026 because there are so many non-nwb assets
                     print("Skipping dandiset because too many consecutive non-NWB files.")
-                    return
+                    break
                 continue
             else:
                 num_consecutive_not_nwb = 0
@@ -108,8 +113,6 @@ def handle_dandiset(
             else:
                 num_consecutive_not_found = 0
 
-            assets = []
-            items = []
             assets.append({
                 'dandiset_id': dandiset_id,
                 'dandiset_version': dandiset_version,
@@ -126,6 +129,8 @@ def handle_dandiset(
                         item_type = 'zarray'
                     elif k.endswith('.zgroup'):
                         item_type = 'zgroup'
+                    else:
+                        item_type = 'unknown'
                     items.append({
                         'dandiset_id': dandiset_id,
                         'dandiset_version': dandiset_version,
