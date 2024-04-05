@@ -1,8 +1,6 @@
 name: collect-all-meta
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "37 9 * * *" # 9:37 AM UTC every day
 jobs:
   main:
     runs-on: ubuntu-latest
