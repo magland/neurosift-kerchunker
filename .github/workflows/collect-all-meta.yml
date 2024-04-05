@@ -1,0 +1,31 @@
+name: process-dandisets
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "37 9 * * *" # 9:37 AM UTC every day
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Python 3.8
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Install lindi
+        run: |
+          git clone https://github.com/neurodataWithoutBorders/lindi
+          cd lindi
+          git checkout rfs-json
+          pip install -e .
+      - name: collect-all-meta
+        run: |
+          python workflow_scripts/collect_all_meta.py
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          S3_ENDPOINT_URL: ${{ secrets.S3_ENDPOINT_URL }}
