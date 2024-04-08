@@ -8,6 +8,7 @@ import boto3
 import urllib.request
 import urllib.error
 import dandi.dandiarchive as da
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def main():
@@ -41,21 +42,27 @@ def create_global_index():
     except Exception as e:
         print(f"Error downloading existing global index: {e}")
         existing_global_index = {"files": []}
-    
+
     existing_neurodata_types_by_asset_id = {}
     for file in existing_global_index["files"]:
         existing_neurodata_types_by_asset_id[file["asset_id"]] = file["neurodata_types"]
 
-
     all_files = []
-    for dandiset_index, dandiset in enumerate(dandisets):
-        print("")
-        print(f"Processing {dandiset.dandiset_id} version {dandiset.version} (dandiset {dandiset_index + 1} / {len(dandisets)})")
-        files = handle_dandiset(dandiset.dandiset_id, dandiset.version, existing_neurodata_types_by_asset_id)
-        if files:
-            all_files.extend(files)
-        if dandiset_index > 3:
-            break
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {
+            executor.submit(
+                handle_dandiset, dandiset.dandiset_id, dandiset.version, existing_neurodata_types_by_asset_id
+            ):
+            dandiset for dandiset in dandisets
+        }
+        num_completed = 0
+        for future in as_completed(futures):
+            num_completed += 1
+            print(f"Completed {num_completed}/{len(dandisets)} dandisets")
+            files = future.result()
+            if files:
+                all_files.extend(files)
+
     with tempfile.TemporaryDirectory() as tmpdir:
         with open(tmpdir + "/global_index.json", "w") as f:
             json.dump({"files": all_files}, f, indent=2, sort_keys=True)
@@ -85,6 +92,8 @@ def handle_dandiset(
     dandiset_version: str,
     existing_neurodata_types_by_asset_id: dict
 ):
+    print(f"Processing dandiset {dandiset_id} version {dandiset_version}")
+
     # Create the dandi parsed url
     parsed_url = da.parse_dandi_url(f"https://dandiarchive.org/dandiset/{dandiset_id}")
 
