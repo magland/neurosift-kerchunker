@@ -67,6 +67,9 @@ def create_global_index():
         with open(tmpdir + "/global_index.json", "w") as f:
             json.dump({"files": all_files}, f, indent=2, sort_keys=True)
         os.system(f"gzip {tmpdir}/global_index.json")
+        # determine size of global_index.json.gz
+        size = os.path.getsize(f"{tmpdir}/global_index.json.gz")
+        print(f"Size of global_index.json.gz (MB): {size / 1024 / 1024}")
         s3 = _get_s3_client()
         print("Uploading global_index.json.gz to S3")
         _upload_file_to_s3(
