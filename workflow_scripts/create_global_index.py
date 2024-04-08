@@ -34,7 +34,8 @@ def create_global_index():
     s3 = _get_s3_client()
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            s3.download_file("neurosift-lindi", "dandi/global_index.json", tmpdir + "/global_index.json")
+            s3.download_file("neurosift-lindi", "dandi/global_index.json.gz", tmpdir + "/global_index.json.gz")
+            os.system(f"gunzip {tmpdir}/global_index.json.gz")
             with open(tmpdir + "/global_index.json", "r") as f:
                 existing_global_index = json.load(f)
     except Exception as e:
@@ -53,16 +54,19 @@ def create_global_index():
         files = handle_dandiset(dandiset.dandiset_id, dandiset.version, existing_neurodata_types_by_asset_id)
         if files:
             all_files.extend(files)
+        if dandiset_index > 3:
+            break
     with tempfile.TemporaryDirectory() as tmpdir:
         with open(tmpdir + "/global_index.json", "w") as f:
             json.dump({"files": all_files}, f, indent=2, sort_keys=True)
+        os.system(f"gzip {tmpdir}/global_index.json")
         s3 = _get_s3_client()
-        print("Uploading global_index.json to S3")
+        print("Uploading global_index.json.gz to S3")
         _upload_file_to_s3(
             s3,
             "neurosift-lindi",
-            "dandi/global_index.json",
-            tmpdir + "/global_index.json",
+            "dandi/global_index.json.gz",
+            tmpdir + "/global_index.json.gz",
         )
 
 
@@ -95,18 +99,22 @@ def handle_dandiset(
         num_consecutive_not_found = 0
         # important to respect the iterator so we don't pull down all the assets at once
         # and overwhelm the server
+        num_assets_processed = 0
         for asset_obj in dandiset.get_assets('path'):
             if not asset_obj.path.endswith(".nwb"):
                 num_consecutive_not_nwb += 1
                 if num_consecutive_not_nwb >= 20:
                     # For example, this is important for 000026 because there are so many non-nwb assets
-                    print("Skipping dandiset because too many consecutive non-NWB files.")
+                    print("Stopping dandiset because too many consecutive non-NWB files.")
                     break
                 continue
             else:
                 num_consecutive_not_nwb = 0
             if num_consecutive_not_found >= 20:
-                print("Skipping dandiset because too many consecutive missing files.")
+                print("Stopping dandiset because too many consecutive missing files.")
+                break
+            if num_assets_processed >= 100:
+                print("Stopping dandiset because 100 assets have been processed.")
                 break
             asset_id = asset_obj.identifier
             asset_path = asset_obj.path
@@ -134,6 +142,7 @@ def handle_dandiset(
                 'neurodata_types': neurodata_types
             }
             files.append(file)
+            num_assets_processed += 1
         return files
 
 
