@@ -37,10 +37,9 @@ def create_global_index():
         files = handle_dandiset(dandiset.dandiset_id, dandiset.version)
         if files:
             all_files.extend(files)
-    neurodata_types = []
     with tempfile.TemporaryDirectory() as tmpdir:
         with open(tmpdir + "/global_index.json", "w") as f:
-            json.dump({"files": all_files, "neurodata_types": neurodata_types}, f, indent=2, sort_keys=True)
+            json.dump({"files": all_files}, f, indent=2, sort_keys=True)
         s3 = _get_s3_client()
         print("Uploading global_index.json to S3")
         _upload_file_to_s3(
