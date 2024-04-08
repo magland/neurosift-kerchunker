@@ -30,11 +30,27 @@ def create_global_index():
 
     dandisets = fetch_all_dandisets()
 
+    # get existing_global_index
+    s3 = _get_s3_client()
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            s3.download_file("neurosift-lindi", "dandi/global_index.json", tmpdir + "/global_index.json")
+            with open(tmpdir + "/global_index.json", "r") as f:
+                existing_global_index = json.load(f)
+    except Exception as e:
+        print(f"Error downloading existing global index: {e}")
+        existing_global_index = {"files": []}
+    
+    existing_neurodata_types_by_asset_id = {}
+    for file in existing_global_index["files"]:
+        existing_neurodata_types_by_asset_id[file["asset_id"]] = file["neurodata_types"]
+
+
     all_files = []
     for dandiset_index, dandiset in enumerate(dandisets):
         print("")
         print(f"Processing {dandiset.dandiset_id} version {dandiset.version} (dandiset {dandiset_index + 1} / {len(dandisets)})")
-        files = handle_dandiset(dandiset.dandiset_id, dandiset.version)
+        files = handle_dandiset(dandiset.dandiset_id, dandiset.version, existing_neurodata_types_by_asset_id)
         if files:
             all_files.extend(files)
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -63,6 +79,7 @@ def _get_s3_client():
 def handle_dandiset(
     dandiset_id: str,
     dandiset_version: str,
+    existing_neurodata_types_by_asset_id: dict
 ):
     # Create the dandi parsed url
     parsed_url = da.parse_dandi_url(f"https://dandiarchive.org/dandiset/{dandiset_id}")
@@ -95,16 +112,19 @@ def handle_dandiset(
             asset_path = asset_obj.path
             file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/zarr.json'
             zarr_json_url = f'https://lindi.neurosift.org/{file_key}'
-            zarr_json = _download_json(zarr_json_url)
             if not _remote_file_exists(zarr_json_url):
                 num_consecutive_not_found += 1
                 continue
-            generation_metadata = zarr_json.get("generationMetadata", {})
-            generation_version = generation_metadata.get("generatedByVersion")
-            if generation_version != 9:
-                num_consecutive_not_found += 1
-                continue
-            neurodata_types = _get_neurodata_types_for_zarr_json(zarr_json)
+            if asset_id in existing_neurodata_types_by_asset_id:
+                neurodata_types = existing_neurodata_types_by_asset_id[asset_id]
+            else:
+                zarr_json = _download_json(zarr_json_url)
+                generation_metadata = zarr_json.get("generationMetadata", {})
+                generation_version = generation_metadata.get("generatedByVersion")
+                if generation_version != 9:
+                    num_consecutive_not_found += 1
+                    continue
+                neurodata_types = _get_neurodata_types_for_zarr_json(zarr_json)
             file = {
                 'dandiset_id': dandiset_id,
                 'dandiset_version': dandiset_version,
