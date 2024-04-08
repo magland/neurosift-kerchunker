@@ -11,7 +11,7 @@ import dandi.dandiarchive as da
 
 
 def main():
-    collect_all_meta()
+    create_global_index()
 
 
 # thisdir = os.path.dirname(os.path.realpath(__file__))
@@ -20,7 +20,7 @@ def main():
 #     dandiset_ids = [x for x in dandiset_ids if x and not x.startswith('#')]
 
 
-def collect_all_meta():
+def create_global_index():
     if os.environ.get("AWS_ACCESS_KEY_ID") is None:
         raise ValueError("AWS_ACCESS_KEY_ID not set.")
     if os.environ.get("AWS_SECRET_ACCESS_KEY") is None:
@@ -30,26 +30,26 @@ def collect_all_meta():
 
     dandisets = fetch_all_dandisets()
 
-    all_assets = []
-    all_items = []
+    all_files = []
     for dandiset_index, dandiset in enumerate(dandisets):
         print("")
         print(f"Processing {dandiset.dandiset_id} version {dandiset.version} (dandiset {dandiset_index + 1} / {len(dandisets)})")
-        x = handle_dandiset(dandiset.dandiset_id, dandiset.version)
-        if x:
-            all_assets.extend(x['assets'])
-            all_items.extend(x['items'])
+        files = handle_dandiset(dandiset.dandiset_id, dandiset.version)
+        if files:
+            all_files.extend(files)
+    neurodata_types = []
     with tempfile.TemporaryDirectory() as tmpdir:
-        with open(tmpdir + "/all_meta.json", "w") as f:
-            json.dump({"assets": all_assets, "items": all_items}, f, indent=2, sort_keys=True)
+        with open(tmpdir + "/global_index.json", "w") as f:
+            json.dump({"files": all_files, "neurodata_types": neurodata_types}, f, indent=2, sort_keys=True)
         s3 = _get_s3_client()
-        print(f"Uploading all_meta.json to S3")
+        print("Uploading global_index.json to S3")
         _upload_file_to_s3(
             s3,
             "neurosift-lindi",
-            "dandi/all_meta.json",
-            tmpdir + "/all_meta.json"
+            "dandi/global_index.json",
+            tmpdir + "/global_index.json",
         )
+
 
 def _get_s3_client():
     return boto3.client(
@@ -72,13 +72,11 @@ def handle_dandiset(
         if dandiset is None:
             print(f"Dandiset {dandiset_id} not found.")
             return
-        
-        assets = []
-        items = []
+
+        files = []
 
         num_consecutive_not_nwb = 0
         num_consecutive_not_found = 0
-        asset_index = 0
         # important to respect the iterator so we don't pull down all the assets at once
         # and overwhelm the server
         for asset_obj in dandiset.get_assets('path'):
@@ -91,86 +89,45 @@ def handle_dandiset(
                 continue
             else:
                 num_consecutive_not_nwb = 0
-            asset = {
-                "identifier": asset_obj.identifier,
-                "path": asset_obj.path,
-                "size": asset_obj.size,
-                "download_url": asset_obj.download_url,
-                "dandiset_id": dandiset_id,
-            }
-            try:
-               zarr_json = process_asset(asset, num=asset_index)
-            except Exception as e:
-                print(asset['download_url'])
-                print(f"Error processing asset {asset_index} ({asset['identifier']}): {e}")
-                raise
-            if zarr_json is None:
+            if num_consecutive_not_found >= 20:
+                print("Skipping dandiset because too many consecutive missing files.")
+                break
+            asset_id = asset_obj.identifier
+            asset_path = asset_obj.path
+            file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/zarr.json'
+            zarr_json_url = f'https://lindi.neurosift.org/{file_key}'
+            zarr_json = _download_json(zarr_json_url)
+            if not _remote_file_exists(zarr_json_url):
                 num_consecutive_not_found += 1
-                if num_consecutive_not_found >= 20:
-                    print("Skipping dandiset because too many consecutive not found.")
-                    return
                 continue
-            else:
-                num_consecutive_not_found = 0
-
-            assets.append({
+            generation_metadata = zarr_json.get("generationMetadata", {})
+            generation_version = generation_metadata.get("generatedByVersion")
+            if generation_version != 9:
+                num_consecutive_not_found += 1
+                continue
+            neurodata_types = _get_neurodata_types_for_zarr_json(zarr_json)
+            file = {
                 'dandiset_id': dandiset_id,
                 'dandiset_version': dandiset_version,
-                'asset_id': asset['identifier'],
-                'asset_path': asset['path'],
-                'asset_size': asset['size'],
-                'asset_download_url': asset['download_url'],
-            })
-            for k, v in zarr_json['refs'].items():
-                if k.endswith('.zattrs') or k.endswith('.zarray') or k.endswith('.zgroup'):
-                    if k.endswith('.zattrs'):
-                        item_type = 'zattrs'
-                    elif k.endswith('.zarray'):
-                        item_type = 'zarray'
-                    elif k.endswith('.zgroup'):
-                        item_type = 'zgroup'
-                    else:
-                        item_type = 'unknown'
-                    items.append({
-                        'dandiset_id': dandiset_id,
-                        'dandiset_version': dandiset_version,
-                        'asset_id': asset['identifier'],
-                        'asset_path': asset['path'],
-                        'item_type': item_type,
-                        'item_key': k,
-                        'item_value': v
-                    })
-        return {
-            'assets': assets,
-            'items': items
-        }
+                'asset_id': asset_id,
+                'asset_path': asset_path,
+                'zarr_json_url': zarr_json_url,
+                'neurodata_types': neurodata_types
+            }
+            files.append(file)
+        return files
 
 
-def process_asset(asset, *, num: int):
-    dandiset_id = asset['dandiset_id']
-    s3 = _get_s3_client()
-    asset_id = asset['identifier']
-    file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/zarr.json'
-    info_file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/info.json'
-    zarr_json_url = f'https://lindi.neurosift.org/{file_key}'
-    info_url = f'https://lindi.neurosift.org/{info_file_key}'
-    found = False
-    if _remote_file_exists(zarr_json_url) and _remote_file_exists(info_url):
-        info = _download_json(info_url)
-        generation_metadata = info.get("generationMetadata", {})
-        if generation_metadata.get("generatedBy") == "dandi_lindi":
-            if generation_metadata.get("generatedByVersion") == 9:
-                found = True
-    if not found:
-        return None
-
-    print(f"Processing asset {asset['download_url']}")
-    try:
-        zarr_json = _download_json(zarr_json_url)
-    except Exception as e:
-        print(f"Error downloading {zarr_json_url}: {e}")
-        return None
-    return zarr_json
+def _get_neurodata_types_for_zarr_json(zarr_json: dict) -> List[str]:
+    neurodata_types = set()
+    refs = zarr_json.get("refs", {})
+    for key in refs:
+        if key.endswith('.zattrs'):
+            zattrs = refs[key]
+            ndt = zattrs.get("neurodata_type")
+            if ndt:
+                neurodata_types.add(ndt)
+    return sorted(neurodata_types)
 
 
 def _remote_file_exists(url: str) -> bool:
