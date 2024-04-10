@@ -1,4 +1,4 @@
-name: create-neurodata-types-index
+name: create-dandiset-nwb-meta-files
 on:
   workflow_dispatch:
   schedule:
@@ -16,9 +16,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: create-neurodata-types-index
+      - name: create-dandiset-nwb-meta-files
         run: |
-          python workflow_scripts/create_neurodata_types_index.py
+          python workflow_scripts/create_dandiset_nwb_meta_files.py
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
