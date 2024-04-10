@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def main():
-    create_global_index()
+    create_neurodata_types_index()
 
 
 # thisdir = os.path.dirname(os.path.realpath(__file__))
@@ -21,7 +21,7 @@ def main():
 #     dandiset_ids = [x for x in dandiset_ids if x and not x.startswith('#')]
 
 
-def create_global_index():
+def create_neurodata_types_index():
     if os.environ.get("AWS_ACCESS_KEY_ID") is None:
         raise ValueError("AWS_ACCESS_KEY_ID not set.")
     if os.environ.get("AWS_SECRET_ACCESS_KEY") is None:
@@ -31,20 +31,20 @@ def create_global_index():
 
     dandisets = fetch_all_dandisets()
 
-    # get existing_global_index
+    # get existing neurodata types index
     s3 = _get_s3_client()
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
-            s3.download_file("neurosift-lindi", "dandi/global_index.json.gz", tmpdir + "/global_index.json.gz")
-            os.system(f"gunzip {tmpdir}/global_index.json.gz")
-            with open(tmpdir + "/global_index.json", "r") as f:
-                existing_global_index = json.load(f)
+            s3.download_file("neurosift-lindi", "dandi/neurodata_types_index.json.gz", tmpdir + "/neurodata_types_index.json.gz")
+            os.system(f"gunzip {tmpdir}/neurodata_types_index.json.gz")
+            with open(tmpdir + "/neurodata_types_index.json", "r") as f:
+                existing_neurodata_types_index = json.load(f)
     except Exception as e:
-        print(f"Error downloading existing global index: {e}")
-        existing_global_index = {"files": []}
+        print(f"Error downloading existing neurodata types index: {e}")
+        existing_neurodata_types_index = {"files": []}
 
     existing_neurodata_types_by_asset_id = {}
-    for file in existing_global_index["files"]:
+    for file in existing_neurodata_types_index["files"]:
         existing_neurodata_types_by_asset_id[file["asset_id"]] = file["neurodata_types"]
 
     all_files = []
@@ -64,19 +64,19 @@ def create_global_index():
                 all_files.extend(files)
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        with open(tmpdir + "/global_index.json", "w") as f:
+        with open(tmpdir + "/neurodata_types_index.json", "w") as f:
             json.dump({"files": all_files}, f, indent=2, sort_keys=True)
-        os.system(f"gzip {tmpdir}/global_index.json")
-        # determine size of global_index.json.gz
-        size = os.path.getsize(f"{tmpdir}/global_index.json.gz")
-        print(f"Size of global_index.json.gz (MB): {size / 1024 / 1024}")
+        os.system(f"gzip {tmpdir}/neurodata_types_index.json")
+        # determine size of neurodata_types_index.json.gz
+        size = os.path.getsize(f"{tmpdir}/neurodata_types_index.json.gz")
+        print(f"Size of neurodata_types_index.json.gz (MB): {size / 1024 / 1024}")
         s3 = _get_s3_client()
-        print("Uploading global_index.json.gz to S3")
+        print("Uploading neurodata_types_index.json.gz to S3")
         _upload_file_to_s3(
             s3,
             "neurosift-lindi",
-            "dandi/global_index.json.gz",
-            tmpdir + "/global_index.json.gz",
+            "dandi/neurodata_types_index.json.gz",
+            tmpdir + "/neurodata_types_index.json.gz",
         )
 
 

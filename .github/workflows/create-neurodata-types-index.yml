@@ -1,4 +1,4 @@
-name: create-global-index
+name: create-neurodata-types-index
 on:
   workflow_dispatch:
 jobs:
@@ -20,9 +20,9 @@ jobs:
           cd lindi
           git checkout rfs-json
           pip install -e .
-      - name: create-global-index
+      - name: create-neurodata-types-index
         run: |
-          python workflow_scripts/create_global_index.py
+          python workflow_scripts/create_neurodata_types_index.py
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
