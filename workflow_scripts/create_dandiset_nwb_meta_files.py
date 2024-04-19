@@ -11,17 +11,7 @@ import dandi.dandiarchive as da
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-def main():
-    create_global_index()
-
-
-# thisdir = os.path.dirname(os.path.realpath(__file__))
-# with open(f'{thisdir}/dandiset_ids.txt', 'r') as f:
-#     dandiset_ids = f.read().splitlines()
-#     dandiset_ids = [x for x in dandiset_ids if x and not x.startswith('#')]
-
-
-def create_global_index():
+def create_dandiset_nwb_meta_files():
     if os.environ.get("AWS_ACCESS_KEY_ID") is None:
         raise ValueError("AWS_ACCESS_KEY_ID not set.")
     if os.environ.get("AWS_SECRET_ACCESS_KEY") is None:
@@ -31,27 +21,10 @@ def create_global_index():
 
     dandisets = fetch_all_dandisets()
 
-    # get existing_global_index
-    s3 = _get_s3_client()
-    try:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            s3.download_file("neurosift-lindi", "dandi/global_index.json.gz", tmpdir + "/global_index.json.gz")
-            os.system(f"gunzip {tmpdir}/global_index.json.gz")
-            with open(tmpdir + "/global_index.json", "r") as f:
-                existing_global_index = json.load(f)
-    except Exception as e:
-        print(f"Error downloading existing global index: {e}")
-        existing_global_index = {"files": []}
-
-    existing_neurodata_types_by_asset_id = {}
-    for file in existing_global_index["files"]:
-        existing_neurodata_types_by_asset_id[file["asset_id"]] = file["neurodata_types"]
-
-    all_files = []
-    with ThreadPoolExecutor(max_workers=6) as executor:
+    with ThreadPoolExecutor(max_workers=10) as executor:
         futures = {
             executor.submit(
-                handle_dandiset, dandiset.dandiset_id, dandiset.version, existing_neurodata_types_by_asset_id
+                handle_dandiset, dandiset.dandiset_id, dandiset.version
             ):
             dandiset for dandiset in dandisets
         }
@@ -59,29 +32,7 @@ def create_global_index():
         for future in as_completed(futures):
             num_completed += 1
             print(f"Completed {num_completed}/{len(dandisets)} dandisets")
-            try:
-                files = future.result()
-                if files:
-                    all_files.extend(files)
-                    print(f'Number of files so far: {len(all_files)}')
-            except Exception as e:
-                print(f"Error processing dandiset: {e}")
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with open(tmpdir + "/global_index.json", "w") as f:
-            json.dump({"files": all_files}, f, indent=2, sort_keys=True)
-        os.system(f"gzip {tmpdir}/global_index.json")
-        # determine size of global_index.json.gz
-        size = os.path.getsize(f"{tmpdir}/global_index.json.gz")
-        print(f"Size of global_index.json.gz (MB): {size / 1024 / 1024}")
-        s3 = _get_s3_client()
-        print("Uploading global_index.json.gz to S3")
-        _upload_file_to_s3(
-            s3,
-            "neurosift-lindi",
-            "dandi/global_index.json.gz",
-            tmpdir + "/global_index.json.gz",
-        )
+            future.result()
 
 
 def _get_s3_client():
@@ -96,10 +47,19 @@ def _get_s3_client():
 
 def handle_dandiset(
     dandiset_id: str,
-    dandiset_version: str,
-    existing_neurodata_types_by_asset_id: dict
+    dandiset_version: str
 ):
     print(f"Processing dandiset {dandiset_id} version {dandiset_version}")
+
+    s3 = _get_s3_client()
+
+    existing_url = f'https://lindi.neurosift.org/dandi/nwb_meta/{dandiset_id}.json.gz'
+    existing = _download_json_gz(existing_url) if _remote_file_exists(existing_url) else {
+        'files': []
+    }
+    existing_nwb_meta_by_asset_id = {}
+    for file in existing['files']:
+        existing_nwb_meta_by_asset_id[file['asset_id']] = file['nwb_meta']
 
     # Create the dandi parsed url
     parsed_url = da.parse_dandi_url(f"https://dandiarchive.org/dandiset/{dandiset_id}")
@@ -139,8 +99,8 @@ def handle_dandiset(
             if not _remote_file_exists(zarr_json_url):
                 num_consecutive_not_found += 1
                 continue
-            if asset_id in existing_neurodata_types_by_asset_id:
-                neurodata_types = existing_neurodata_types_by_asset_id[asset_id]
+            if asset_id in existing_nwb_meta_by_asset_id:
+                nwb_meta = existing_nwb_meta_by_asset_id[asset_id]
             else:
                 zarr_json = _download_json(zarr_json_url)
                 generation_metadata = zarr_json.get("generationMetadata", {})
@@ -148,30 +108,41 @@ def handle_dandiset(
                 if generation_version != 9:
                     num_consecutive_not_found += 1
                     continue
-                neurodata_types = _get_neurodata_types_for_zarr_json(zarr_json)
+                nwb_meta = _get_nwb_meta_for_file(zarr_json)
             file = {
                 'dandiset_id': dandiset_id,
                 'dandiset_version': dandiset_version,
                 'asset_id': asset_id,
                 'asset_path': asset_path,
                 'zarr_json_url': zarr_json_url,
-                'neurodata_types': neurodata_types
+                'nwb_meta': nwb_meta
             }
             files.append(file)
             num_assets_processed += 1
-        return files
+        xx = {
+            'files': files
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with open(tmpdir + f"/{dandiset_id}.json", "w") as f:
+                json.dump(xx, f, indent=2, sort_keys=True)
+            os.system(f"gzip {tmpdir}/{dandiset_id}.json")
+            print(f"Uploading {tmpdir}/{dandiset_id}.json.gz")
+            assert os.path.exists(tmpdir + f"/{dandiset_id}.json.gz")
+            _upload_file_to_s3(
+                s3,
+                "neurosift-lindi",
+                f"dandi/nwb_meta/{dandiset_id}.json.gz",
+                tmpdir + f"/{dandiset_id}.json.gz",
+            )
 
 
-def _get_neurodata_types_for_zarr_json(zarr_json: dict) -> List[str]:
-    neurodata_types = set()
-    refs = zarr_json.get("refs", {})
-    for key in refs:
-        if key.endswith('.zattrs'):
-            zattrs = refs[key]
-            ndt = zattrs.get("neurodata_type")
-            if ndt:
-                neurodata_types.add(ndt)
-    return sorted(neurodata_types)
+def _get_nwb_meta_for_file(zarr_json: dict) -> dict:
+    new_zarr_json = json.loads(json.dumps(zarr_json))
+    new_zarr_json['refs'] = {}
+    for key in zarr_json['refs']:
+        if key.endswith('.zattrs') or key.endswith('.zgroup') or key.endswith('.zarray') or key.endswith('zarr.json'):
+            new_zarr_json['refs'][key] = zarr_json['refs'][key]
+    return new_zarr_json
 
 
 def _remote_file_exists(url: str) -> bool:
@@ -261,10 +232,33 @@ def _download_json(url: str) -> dict:
                 raise
 
 
+def _download_json_gz(url: str) -> dict:
+    num_retries = 3
+    while True:
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+            }
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req) as response:
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    with open(tmpdir + "/tmp.json.gz", "wb") as f:
+                        f.write(response.read())
+                    os.system(f"gunzip {tmpdir}/tmp.json.gz")
+                    with open(tmpdir + "/tmp.json", "r") as f:
+                        return json.load(f)
+        except Exception as e:
+            print(f"Error downloading {url}: {e}")
+            time.sleep(3)
+            num_retries -= 1
+            if num_retries == 0:
+                raise
+
+
 class Dandiset(BaseModel):
     dandiset_id: str
     version: str
 
 
 if __name__ == '__main__':
-    main()
+    create_dandiset_nwb_meta_files()
