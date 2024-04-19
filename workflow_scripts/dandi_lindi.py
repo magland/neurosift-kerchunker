@@ -139,7 +139,7 @@ def process_asset(asset, *, num: int):
             info = _download_json(info_url)
             generation_metadata = info.get("generationMetadata", {})
             if generation_metadata.get("generatedBy") == "dandi_lindi":
-                if generation_metadata.get("generatedByVersion") == 9:
+                if generation_metadata.get("generatedByVersion") == 10:
                     # print(f"Skipping {asset_id} because it already exists.")
                     return
 
@@ -161,7 +161,7 @@ def process_asset(asset, *, num: int):
             elapsed0 = time.time() - timer0
             generation_metadata = {
                 "generatedBy": "dandi_lindi",
-                "generatedByVersion": 9,
+                "generatedByVersion": 10,
                 "dandisetId": dandiset_id,
                 "assetId": asset_id,
                 "assetPath": asset['path'],
@@ -233,7 +233,7 @@ def _remote_file_exists(url: str) -> bool:
 
 
 def _create_zarr_json(nwb_url: str, zarr_json_path: str):
-    store = lindi.LindiH5ZarrStore.from_file(nwb_url)
+    store = lindi.LindiH5ZarrStore.from_file(nwb_url, opts=lindi.LindiH5ZarrStoreOpts(num_dataset_chunks_threshold=50000))
     rfs = store.to_reference_file_system()
     with open(zarr_json_path, 'w') as g:
         json.dump(rfs, g, indent=2, sort_keys=True)
