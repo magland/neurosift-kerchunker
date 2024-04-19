@@ -59,9 +59,13 @@ def create_global_index():
         for future in as_completed(futures):
             num_completed += 1
             print(f"Completed {num_completed}/{len(dandisets)} dandisets")
-            files = future.result()
-            if files:
-                all_files.extend(files)
+            try:
+                files = future.result()
+                if files:
+                    all_files.extend(files)
+                    print(f'Number of files so far: {len(all_files)}')
+            except Exception as e:
+                print(f"Error processing dandiset: {e}")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         with open(tmpdir + "/global_index.json", "w") as f:
