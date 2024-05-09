@@ -25,7 +25,7 @@ def create_meta_doc():
             executor.submit(
                 handle_dandiset, dandiset.dandiset_id, dandiset.version
             ):
-            dandiset for dandiset in dandisets[:1]
+            dandiset for dandiset in dandisets
         }
         num_completed = 0
         for future in as_completed(futures):
@@ -94,13 +94,19 @@ def handle_dandiset(
             if generation_version != 9:
                 num_consecutive_not_found += 1
                 continue
+            zarr_json_meta = {
+                'refs': {}
+            }
+            for k in zarr_json['refs'].keys():
+                if k.endswith('.zattrs') or k.endswith('.zarray'):
+                    zarr_json_meta['refs'][k] = zarr_json['refs'][k]
             file = {
                 'dandiset_id': dandiset_id,
                 'dandiset_version': dandiset_version,
                 'asset_id': asset_id,
                 'asset_path': asset_path,
                 'zarr_json_url': zarr_json_url,
-                'zarr_json': zarr_json
+                'zarr_json_meta': zarr_json_meta
             }
             files.append(file)
             num_assets_processed += 1
