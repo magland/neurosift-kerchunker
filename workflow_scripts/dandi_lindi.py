@@ -157,7 +157,6 @@ def process_asset(asset, *, num: int):
             s3.delete_object(Bucket="neurosift-lindi", Key=old_zarr_json_file_key)
             return
 
-    return
     print(f"Processing asset {asset['download_url']}")
 
     lock = acquire_lock(asset_id)
