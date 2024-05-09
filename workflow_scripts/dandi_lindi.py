@@ -130,19 +130,34 @@ def process_asset(asset, *, num: int):
         region_name="auto",  # for cloudflare
     )
     asset_id = asset['identifier']
-    file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/zarr.json'
+    file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/nwb.lindi.json'
+    old_zarr_json_file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/zarr.json'
     info_file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/info.json'
-    zarr_json_url = f'https://lindi.neurosift.org/{file_key}'
+    lindi_json_url = f'https://lindi.neurosift.org/{file_key}'
+    old_zarr_json_url = f'https://lindi.neurosift.org/{old_zarr_json_file_key}'
     info_url = f'https://lindi.neurosift.org/{info_file_key}'
     if not force:
-        if _remote_file_exists(zarr_json_url) and _remote_file_exists(info_url):
+        if _remote_file_exists(lindi_json_url) and _remote_file_exists(info_url):
             info = _download_json(info_url)
             generation_metadata = info.get("generationMetadata", {})
             if generation_metadata.get("generatedBy") == "dandi_lindi":
                 if generation_metadata.get("generatedByVersion") == 10:
                     # print(f"Skipping {asset_id} because it already exists.")
                     return
+        elif _remote_file_exists(old_zarr_json_url):
+            # copying old zarr.json to new nwb.lindi.json
+            print(f"Copying {old_zarr_json_url} to {lindi_json_url}")
+            s3.copy_object(
+                Bucket="neurosift-lindi",
+                CopySource={"Bucket": "neurosift-lindi", "Key": old_zarr_json_file_key},
+                Key=file_key,
+            )
+            # deleting old zarr.json
+            print(f"Deleting {old_zarr_json_url}")
+            s3.delete_object(Bucket="neurosift-lindi", Key=old_zarr_json_file_key)
+            return
 
+    return
     print(f"Processing asset {asset['download_url']}")
 
     lock = acquire_lock(asset_id)
@@ -154,7 +169,7 @@ def process_asset(asset, *, num: int):
             print(f"[{asset['dandiset_id']} {num}] Processing asset {asset_id}: {asset['path']}")
             timer0 = time.time()
             with write_console_output(tmpdir + "/output.txt"):
-                _create_zarr_json(asset['download_url'], tmpdir + "/zarr.json")
+                _create_lindi_json(asset['download_url'], tmpdir + "/nwb.lindi.json")
             with open(tmpdir + "/output.txt", "r") as f:
                 output = f.read()
                 print(output)
@@ -171,14 +186,14 @@ def process_asset(asset, *, num: int):
                 "generationDuration": f"{elapsed0:.1f} seconds",
                 "console_output": open(tmpdir + "/output.txt", "r").read()
             }
-            with open(tmpdir + '/zarr.json', 'r') as f:
-                zarr_json = json.load(f)
-                zarr_json['generationMetadata'] = generation_metadata
+            with open(tmpdir + '/nwb.lindi.json', 'r') as f:
+                lindi_json = json.load(f)
+                lindi_json['generationMetadata'] = generation_metadata
             info = {
-                'generationMetadata': zarr_json['generationMetadata'],
+                'generationMetadata': lindi_json['generationMetadata'],
             }
-            with open(tmpdir + '/zarr.json', 'w') as f:
-                json.dump(zarr_json, f, indent=2, sort_keys=True)
+            with open(tmpdir + '/nwb.lindi.json', 'w') as f:
+                json.dump(lindi_json, f, indent=2, sort_keys=True)
             with open(tmpdir + '/info.json', 'w') as f:
                 json.dump(info, f, indent=2)
 
@@ -187,7 +202,7 @@ def process_asset(asset, *, num: int):
                 s3,
                 "neurosift-lindi",
                 file_key,
-                tmpdir + "/zarr.json"
+                tmpdir + "/nwb.lindi.json"
             )
             print(f"Uploading {info_file_key} to S3")
             _upload_file_to_s3(
@@ -232,10 +247,10 @@ def _remote_file_exists(url: str) -> bool:
             raise e
 
 
-def _create_zarr_json(nwb_url: str, zarr_json_path: str):
+def _create_lindi_json(nwb_url: str, lindi_json_path: str):
     store = lindi.LindiH5ZarrStore.from_file(nwb_url, opts=lindi.LindiH5ZarrStoreOpts(num_dataset_chunks_threshold=50000))
     rfs = store.to_reference_file_system()
-    with open(zarr_json_path, 'w') as g:
+    with open(lindi_json_path, 'w') as g:
         json.dump(rfs, g, indent=2, sort_keys=True)
 
 

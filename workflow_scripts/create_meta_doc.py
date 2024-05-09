@@ -82,7 +82,7 @@ def handle_dandiset(
                 break
             asset_id = asset_obj.identifier
             asset_path = asset_obj.path
-            file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/zarr.json'
+            file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/nwb.lindi.json'
             zarr_json_url = f'https://lindi.neurosift.org/{file_key}'
             if not _remote_file_exists(zarr_json_url):
                 num_consecutive_not_found += 1

@@ -94,7 +94,7 @@ def handle_dandiset(
                 break
             asset_id = asset_obj.identifier
             asset_path = asset_obj.path
-            file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/zarr.json'
+            file_key = f'dandi/dandisets/{dandiset_id}/assets/{asset_id}/nwb.lindi.json'
             zarr_json_url = f'https://lindi.neurosift.org/{file_key}'
             if not _remote_file_exists(zarr_json_url):
                 num_consecutive_not_found += 1
@@ -140,7 +140,7 @@ def _get_nwb_meta_for_file(zarr_json: dict) -> dict:
     new_zarr_json = json.loads(json.dumps(zarr_json))
     new_zarr_json['refs'] = {}
     for key in zarr_json['refs']:
-        if key.endswith('.zattrs') or key.endswith('.zgroup') or key.endswith('.zarray') or key.endswith('zarr.json'):
+        if key.endswith('.zattrs') or key.endswith('.zgroup') or key.endswith('.zarray') or key.endswith('lindi.json'):
             new_zarr_json['refs'][key] = zarr_json['refs'][key]
     return new_zarr_json
 
