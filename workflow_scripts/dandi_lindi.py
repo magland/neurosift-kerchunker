@@ -85,6 +85,7 @@ def handle_dandiset(
 
         num_consecutive_not_nwb = 0
         asset_index = 0
+        num_assets_processed = 0
         # important to respect the iterator so we don't pull down all the assets at once
         # and overwhelm the server
         for asset_obj in dandiset.get_assets('path'):
@@ -113,11 +114,13 @@ def handle_dandiset(
                 print(asset['download_url'])
                 print(f"Error processing asset {asset_index} ({asset['identifier']}): {e}")
                 raise
+            num_assets_processed += 1
             elapsed_sec = time.time() - timer
             if elapsed_sec > max_time_sec:
                 print("Time limit reached.")
                 return
             asset_index += 1
+        print(f"Processed {num_assets_processed} assets in dandiset {dandiset_id}")
 
 
 def process_asset(asset, *, num: int):
