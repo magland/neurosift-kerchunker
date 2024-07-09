@@ -53,6 +53,9 @@ def dandi_lindi(
         #     continue
         print("")
         print(f"Processing {dandiset.dandiset_id} version {dandiset.version} (dandiset {dandiset_index + 1} / {len(dandisets)})")
+        if dandiset.dandiset_id != '000935':
+            # for testing, only process 000935
+            continue
         with multiprocessing.Pool(num_parallel) as p:
             async_results = [
                 p.apply_async(handle_dandiset, args=(dandiset.dandiset_id, max_time_sec_per_dandiset, num_parallel, ii))
@@ -144,7 +147,7 @@ def process_asset(asset, *, num: int):
             info = _download_json(info_url)
             generation_metadata = info.get("generationMetadata", {})
             if generation_metadata.get("generatedBy") == "dandi_lindi":
-                if generation_metadata.get("generatedByVersion") == 10:
+                if generation_metadata.get("generatedByVersion") == 11:
                     # print(f"Skipping {asset_id} because it already exists.")
                     return
         elif _remote_file_exists(old_zarr_json_url):
@@ -178,7 +181,7 @@ def process_asset(asset, *, num: int):
             elapsed0 = time.time() - timer0
             generation_metadata = {
                 "generatedBy": "dandi_lindi",
-                "generatedByVersion": 10,
+                "generatedByVersion": 11,
                 "dandisetId": dandiset_id,
                 "assetId": asset_id,
                 "assetPath": asset['path'],
