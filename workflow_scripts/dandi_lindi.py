@@ -53,9 +53,9 @@ def dandi_lindi(
         #     continue
         print("")
         print(f"Processing {dandiset.dandiset_id} version {dandiset.version} (dandiset {dandiset_index + 1} / {len(dandisets)})")
-        if dandiset.dandiset_id not in ['000003', '000019', '000021', '000022', '000028', '000034', '000041', '000044', '000048', '000055', '000056', '000059', '000061', '000065', '000067', '000070', '000114', '000115', '000149', '000165', '000166', '000213', '000218', '000223', '000230', '000233', '000248', '000253', '000294', '000299', '000339', '000363', '000397', '000398', '000399', '000410', '000411', '000447', '000458', '000463', '000465', '000473', '000481', '000482', '000546', '000552', '000554', '000568', '000574', '000575', '000576', '000582', '000618', '000623', '000629', '000673', '000687', '000696', '000710', '000713', '000717', '000732', '000876', '000932', '000935', '000937', '000957', '000960']:
-            # for testing, only process select dandisets
-            continue
+        # if dandiset.dandiset_id not in ['000003', '000019', '000021', '000022', '000028', '000034', '000041', '000044', '000048', '000055', '000056', '000059', '000061', '000065', '000067', '000070', '000114', '000115', '000149', '000165', '000166', '000213', '000218', '000223', '000230', '000233', '000248', '000253', '000294', '000299', '000339', '000363', '000397', '000398', '000399', '000410', '000411', '000447', '000458', '000463', '000465', '000473', '000481', '000482', '000546', '000552', '000554', '000568', '000574', '000575', '000576', '000582', '000618', '000623', '000629', '000673', '000687', '000696', '000710', '000713', '000717', '000732', '000876', '000932', '000935', '000937', '000957', '000960']:
+        #     # for testing, only process select dandisets
+        #     continue
         with multiprocessing.Pool(num_parallel) as p:
             async_results = [
                 p.apply_async(handle_dandiset, args=(dandiset.dandiset_id, max_time_sec_per_dandiset, num_parallel, ii))
@@ -143,24 +143,28 @@ def process_asset(asset, *, num: int):
     old_zarr_json_url = f'https://lindi.neurosift.org/{old_zarr_json_file_key}'
     info_url = f'https://lindi.neurosift.org/{info_file_key}'
     if not force:
-        if _remote_file_exists(lindi_json_url) and _remote_file_exists(info_url):
-            info = _download_json(info_url)
-            generation_metadata = info.get("generationMetadata", {})
-            if generation_metadata.get("generatedBy") == "dandi_lindi":
-                if generation_metadata.get("generatedByVersion") == 11:
-                    # print(f"Skipping {asset_id} because it already exists.")
-                    return
-        elif _remote_file_exists(old_zarr_json_url):
-            # copying old zarr.json to new nwb.lindi.json
-            print(f"Copying {old_zarr_json_url} to {lindi_json_url}")
-            s3.copy_object(
-                Bucket="neurosift-lindi",
-                CopySource={"Bucket": "neurosift-lindi", "Key": old_zarr_json_file_key},
-                Key=file_key,
-            )
-            # deleting old zarr.json
-            print(f"Deleting {old_zarr_json_url}")
-            s3.delete_object(Bucket="neurosift-lindi", Key=old_zarr_json_file_key)
+        try:
+            if _remote_file_exists(lindi_json_url) and _remote_file_exists(info_url):
+                info = _download_json(info_url)
+                generation_metadata = info.get("generationMetadata", {})
+                if generation_metadata.get("generatedBy") == "dandi_lindi":
+                    if generation_metadata.get("generatedByVersion") == 11:
+                        # print(f"Skipping {asset_id} because it already exists.")
+                        return
+            elif _remote_file_exists(old_zarr_json_url):
+                # copying old zarr.json to new nwb.lindi.json
+                print(f"Copying {old_zarr_json_url} to {lindi_json_url}")
+                s3.copy_object(
+                    Bucket="neurosift-lindi",
+                    CopySource={"Bucket": "neurosift-lindi", "Key": old_zarr_json_file_key},
+                    Key=file_key,
+                )
+                # deleting old zarr.json
+                print(f"Deleting {old_zarr_json_url}")
+                s3.delete_object(Bucket="neurosift-lindi", Key=old_zarr_json_file_key)
+                return
+        except:
+            print('Problem checking if remote files exist')
             return
 
     print(f"Processing asset {asset['download_url']}")
