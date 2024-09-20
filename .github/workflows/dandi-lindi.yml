@@ -17,11 +17,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       - name: Install lindi
-        run: |
-          git clone https://github.com/neurodataWithoutBorders/lindi
-          cd lindi
-          git checkout split-contiguous-datasets
-          pip install -e .
+        run: pip install lindi
       - name: dandi-lindi
         run: |
           python workflow_scripts/dandi_lindi.py

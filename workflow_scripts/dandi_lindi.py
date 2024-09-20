@@ -148,7 +148,7 @@ def process_asset(asset, *, num: int):
                 info = _download_json(info_url)
                 generation_metadata = info.get("generationMetadata", {})
                 if generation_metadata.get("generatedBy") == "dandi_lindi":
-                    if generation_metadata.get("generatedByVersion") == 11:
+                    if generation_metadata.get("generatedByVersion") == 12:
                         # print(f"Skipping {asset_id} because it already exists.")
                         return
             elif _remote_file_exists(old_zarr_json_url):
@@ -185,7 +185,7 @@ def process_asset(asset, *, num: int):
             elapsed0 = time.time() - timer0
             generation_metadata = {
                 "generatedBy": "dandi_lindi",
-                "generatedByVersion": 11,
+                "generatedByVersion": 12,
                 "dandisetId": dandiset_id,
                 "assetId": asset_id,
                 "assetPath": asset['path'],
