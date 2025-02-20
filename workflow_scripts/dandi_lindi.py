@@ -91,11 +91,13 @@ def handle_dandiset(
         num_assets_processed = 0
         # important to respect the iterator so we don't pull down all the assets at once
         # and overwhelm the server
-        for asset_obj in dandiset.get_assets('path'):
+        # for asset_obj in dandiset.get_assets('path'):
+        for asset_obj in dandiset.get_assets_by_glob('*.nwb', 'path'):
             if not asset_obj.path.endswith(".nwb"):
                 num_consecutive_not_nwb += 1
                 if num_consecutive_not_nwb >= 20:
                     # For example, this is important for 000026 because there are so many non-nwb assets
+                    # not needed if we are getting assets by glob, but we leave it in anyway
                     print("Skipping dandiset because too many consecutive non-NWB files.")
                     return
                 continue
