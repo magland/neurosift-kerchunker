@@ -107,7 +107,7 @@ def handle_dandiset(
                 zarr_json = _download_json(zarr_json_url)
                 generation_metadata = zarr_json.get("generationMetadata", {})
                 generation_version = generation_metadata.get("generatedByVersion")
-                if generation_version != 9:
+                if generation_version != 12:
                     num_consecutive_not_found += 1
                     continue
                 nwb_meta = _get_nwb_meta_for_file(zarr_json)
