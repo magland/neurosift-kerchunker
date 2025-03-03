@@ -1,4 +1,4 @@
-name: process-dandisets
+name: create-nwb-usage-scripts
 on:
   workflow_dispatch:
   schedule:
