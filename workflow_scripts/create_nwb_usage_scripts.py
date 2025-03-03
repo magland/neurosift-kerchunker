@@ -14,7 +14,7 @@ import pynwb
 from NWBTyped import NWBTyped
 
 max_time_sec_per_dandiset = 20
-version = 'v5' # increment this to force reprocessing of all assets
+version = 'v6' # increment this to force reprocessing of all assets
 
 def create_nwb_usage_scripts():
     dandisets = fetch_all_dandisets()

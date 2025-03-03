@@ -210,14 +210,14 @@ def get_object_string(varname: str, varexpr: str, obj: Any) -> str:
             shape = (
                 getattr(timestamps, "shape", None) if timestamps is not None else None
             )
-            s += f"{varname}.timestamps # shape: {shape}\n"
+            s += f"{varname}.timestamps # (h5py.Dataset) shape: {shape}\n"
         else:
             s += f"{varname}.starting_time # {obj.starting_time}\n"
             s += f"{varname}.rate # {obj.rate}\n"  # type: ignore
         data = obj.data
         shape = getattr(data, "shape", None) if data is not None else None
         dtype = getattr(data, "dtype", None) if data is not None else None
-        s += f"{varname}.data # shape: {shape}; dtype: {dtype}\n"
+        s += f"{varname}.data # (h5py.Dataset) shape: {shape}; dtype: {dtype}\n"
     elif type(obj).__name__ == "TimeIntervals":
         assert isinstance(obj, pynwb.epoch.TimeIntervals)
         if description:
