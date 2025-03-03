@@ -18,7 +18,7 @@ jobs:
           pip install -r requirements.txt
       - name: Install lindi
         run: pip install lindi
-      - name: dandi-lindi
+      - name: Run create_nwb_usage_scripts.py
         run: |
           python workflow_scripts/create_nwb_usage_scripts.py
         env:

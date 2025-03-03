@@ -99,7 +99,7 @@ def process_asset(asset, *, num: int):
         with open(fname_usage_py, 'w') as f:
             f.write(usage_script)
         _upload_file(fname_usage_py, 'neurosift-lindi', file_key_usage)
-        print(f"Uploaded usage script for asset {path} to {usage_url}.")
+        print(f"Uploaded usage script for asset {path} to {usage_url}")
     print(f"Processed asset {path}.")
 
 
