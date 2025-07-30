@@ -2,7 +2,7 @@ name: create-neurodata-types-index
 on:
   workflow_dispatch:
   schedule:
-    - cron: "37 7 * * *" # 7:37 AM UTC every day
+    - cron: "37 9 */3 * *" # 9:37 AM UTC every 3 days
 jobs:
   main:
     runs-on: ubuntu-latest
