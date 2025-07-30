@@ -2,7 +2,7 @@ name: process-dandisets
 on:
   workflow_dispatch:
   schedule:
-    - cron: "37 3 * * *" # 3:37 AM UTC every day
+    - cron: "37 3 */3 * *" # 3:37 AM UTC every 3 days
 jobs:
   main:
     runs-on: ubuntu-latest
