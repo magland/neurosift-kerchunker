@@ -56,13 +56,19 @@ def dandi_lindi(
         # if dandiset.dandiset_id not in ['000003', '000019', '000021', '000022', '000028', '000034', '000041', '000044', '000048', '000055', '000056', '000059', '000061', '000065', '000067', '000070', '000114', '000115', '000149', '000165', '000166', '000213', '000218', '000223', '000230', '000233', '000248', '000253', '000294', '000299', '000339', '000363', '000397', '000398', '000399', '000410', '000411', '000447', '000458', '000463', '000465', '000473', '000481', '000482', '000546', '000552', '000554', '000568', '000574', '000575', '000576', '000582', '000618', '000623', '000629', '000673', '000687', '000696', '000710', '000713', '000717', '000732', '000876', '000932', '000935', '000937', '000957', '000960']:
         #     # for testing, only process select dandisets
         #     continue
-        with multiprocessing.Pool(num_parallel) as p:
-            async_results = [
-                p.apply_async(handle_dandiset, args=(dandiset.dandiset_id, max_time_sec_per_dandiset, num_parallel, ii))
-                for ii in range(num_parallel)
-            ]
-            for async_result in async_results:
-                async_result.get()
+        try:
+            with multiprocessing.Pool(num_parallel) as p:
+                async_results = [
+                    p.apply_async(handle_dandiset, args=(dandiset.dandiset_id, max_time_sec_per_dandiset, num_parallel, ii))
+                    for ii in range(num_parallel)
+                ]
+                for async_result in async_results:
+                    async_result.get()
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"Error processing dandiset {dandiset.dandiset_id}: {e}")
+            break
         elapsed_sec = time.time() - timer
         print(f"Time elapsed thus far: {elapsed_sec} seconds")
         if elapsed_sec > max_time_sec:
