@@ -1,0 +1,13 @@
+[project]
+name = "neurosift-kerchunker"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "boto3",
+    "dandi>=0.74.0",
+    "h5py",
+    "numpy",
+    "filelock",
+    "pynwb>=3.0.0",
+    "lindi",
+]
