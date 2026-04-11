@@ -1,6 +1,0 @@
-boto3
-dandi
-h5py
-numpy
-filelock
-pynwb>=3.0.0
