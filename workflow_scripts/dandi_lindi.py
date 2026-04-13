@@ -68,7 +68,7 @@ def dandi_lindi(
             import traceback
             traceback.print_exc()
             print(f"Error processing dandiset {dandiset.dandiset_id}: {e}")
-            break
+            continue
         elapsed_sec = time.time() - timer
         print(f"Time elapsed thus far: {elapsed_sec} seconds")
         if elapsed_sec > max_time_sec:
